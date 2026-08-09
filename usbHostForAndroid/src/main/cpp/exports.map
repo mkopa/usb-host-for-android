@@ -1,0 +1,19 @@
+USBHOST_1.0 {
+    global:
+        usbhost_abi_version;
+        usbhost_open_stlink_v3_fd;
+        usbhost_connect_target;
+        usbhost_read_memory;
+        usbhost_close;
+        usbhost_status_name;
+        usbhost_last_status;
+        usbhost_last_error;
+        Java_dev_usbhost_android_NativeBridge_open;
+        Java_dev_usbhost_android_NativeBridge_connectTarget;
+        Java_dev_usbhost_android_NativeBridge_readMemory;
+        Java_dev_usbhost_android_NativeBridge_close;
+        Java_dev_usbhost_android_NativeBridge_lastStatus;
+        Java_dev_usbhost_android_NativeBridge_lastError;
+    local:
+        *;
+};
