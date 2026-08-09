@@ -2,8 +2,8 @@
 
 **Date**: 2026-08-08
 **Result**: PASS for the scenarios marked below
-**Library revision**: `16edfb864d35842d50391f041e58cab44625bfc5` plus the uncommitted
-`001-stlink-android-host` feature worktree
+**Library revision**: pre-release `001-stlink-android-host` validation worktree; the exact validated
+artifact is identified by the APK SHA-256 below
 **APK SHA-256**: `7350B63D7E633F094C2AE834754F78E2145F90402A5BF82AFDAAEE33C33384AB`
 
 ## Environment
