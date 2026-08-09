@@ -1,0 +1,56 @@
+name: CodeQL
+
+on:
+  push:
+    branches: [main, dev]
+  pull_request:
+    branches: [main, dev]
+  schedule:
+    - cron: '23 4 * * 1'
+
+permissions:
+  contents: read
+  security-events: write
+
+concurrency:
+  group: codeql-${{ github.ref }}-${{ matrix.language }}
+  cancel-in-progress: true
+
+jobs:
+  analyze:
+    name: Analyze ${{ matrix.language }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        language: [java-kotlin, c-cpp]
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          submodules: recursive
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v6
+      - uses: github/codeql-action/init@v4
+        with:
+          languages: ${{ matrix.language }}
+      - name: Install Android toolchain
+        if: matrix.language == 'java-kotlin'
+        run: |
+          yes | sdkmanager --licenses >/dev/null
+          sdkmanager 'platforms;android-35' 'platforms;android-37' 'build-tools;37.0.0' \
+            'ndk;28.2.13676358' 'cmake;3.22.1'
+      - name: Build Java and Kotlin
+        if: matrix.language == 'java-kotlin'
+        run: ./gradlew --no-daemon :usbHostForAndroid:compileDebugJavaWithJavac :usbHostExample:compileDebugKotlin
+      - name: Build C and C++
+        if: matrix.language == 'c-cpp'
+        run: |
+          cmake -S native-tests -B build/codeql -G Ninja -DCMAKE_BUILD_TYPE=Debug
+          cmake --build build/codeql --parallel 2
+      - uses: github/codeql-action/analyze@v4
+        with:
+          category: /language:${{ matrix.language }}

@@ -18,7 +18,7 @@ jlongArray makeLongArray(JNIEnv *env, const std::vector<jlong> &values) {
 }  // namespace
 
 extern "C" JNIEXPORT jlongArray JNICALL
-Java_dev_usbhost_android_NativeBridge_open(JNIEnv *env, jclass, jint fd, jint vendorId,
+Java_info_marcin_usbhost_NativeBridge_open(JNIEnv *env, jclass, jint fd, jint vendorId,
                                             jint productId, jint swdFrequencyKhz) {
     usbhost_session session = 0;
     usbhost_programmer_info programmer{};
@@ -32,7 +32,7 @@ Java_dev_usbhost_android_NativeBridge_open(JNIEnv *env, jclass, jint fd, jint ve
 }
 
 extern "C" JNIEXPORT jlongArray JNICALL
-Java_dev_usbhost_android_NativeBridge_connectTarget(JNIEnv *env, jclass, jlong handle) {
+Java_info_marcin_usbhost_NativeBridge_connectTarget(JNIEnv *env, jclass, jlong handle) {
     usbhost_target_info target{};
     target.struct_size = sizeof(target);
     const usbhost_status status = usbhost_connect_target(
@@ -43,7 +43,7 @@ Java_dev_usbhost_android_NativeBridge_connectTarget(JNIEnv *env, jclass, jlong h
 }
 
 extern "C" JNIEXPORT jbyteArray JNICALL
-Java_dev_usbhost_android_NativeBridge_readMemory(JNIEnv *env, jclass, jlong handle,
+Java_info_marcin_usbhost_NativeBridge_readMemory(JNIEnv *env, jclass, jlong handle,
                                                   jlong address, jint length) {
     if (length <= 0) {
         return nullptr;
@@ -64,16 +64,16 @@ Java_dev_usbhost_android_NativeBridge_readMemory(JNIEnv *env, jclass, jlong hand
 }
 
 extern "C" JNIEXPORT jint JNICALL
-Java_dev_usbhost_android_NativeBridge_close(JNIEnv *, jclass, jlong handle) {
+Java_info_marcin_usbhost_NativeBridge_close(JNIEnv *, jclass, jlong handle) {
     return usbhost_close(static_cast<usbhost_session>(handle));
 }
 
 extern "C" JNIEXPORT jint JNICALL
-Java_dev_usbhost_android_NativeBridge_lastStatus(JNIEnv *, jclass) {
+Java_info_marcin_usbhost_NativeBridge_lastStatus(JNIEnv *, jclass) {
     return usbhost_last_status();
 }
 
 extern "C" JNIEXPORT jstring JNICALL
-Java_dev_usbhost_android_NativeBridge_lastError(JNIEnv *env, jclass) {
+Java_info_marcin_usbhost_NativeBridge_lastError(JNIEnv *env, jclass) {
     return env->NewStringUTF(usbhost_last_error());
 }

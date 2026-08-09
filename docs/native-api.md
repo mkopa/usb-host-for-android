@@ -32,4 +32,4 @@ size-prefixed structures, caller-owned buffers, and opaque numeric handles. A fu
 - translate status codes without assuming diagnostic string stability;
 - call `usbhost_close` from `Drop` while also exposing explicit close.
 
-No Rust crate or JNI replacement is part of v1.
+No Rust crate or JNI replacement is part of version 0.1.0.

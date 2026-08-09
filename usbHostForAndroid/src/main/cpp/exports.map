@@ -8,12 +8,12 @@ USBHOST_1.0 {
         usbhost_status_name;
         usbhost_last_status;
         usbhost_last_error;
-        Java_dev_usbhost_android_NativeBridge_open;
-        Java_dev_usbhost_android_NativeBridge_connectTarget;
-        Java_dev_usbhost_android_NativeBridge_readMemory;
-        Java_dev_usbhost_android_NativeBridge_close;
-        Java_dev_usbhost_android_NativeBridge_lastStatus;
-        Java_dev_usbhost_android_NativeBridge_lastError;
+        Java_info_marcin_usbhost_NativeBridge_open;
+        Java_info_marcin_usbhost_NativeBridge_connectTarget;
+        Java_info_marcin_usbhost_NativeBridge_readMemory;
+        Java_info_marcin_usbhost_NativeBridge_close;
+        Java_info_marcin_usbhost_NativeBridge_lastStatus;
+        Java_info_marcin_usbhost_NativeBridge_lastError;
     local:
         *;
 };
