@@ -1,0 +1,43 @@
+# Gradle / Android
+.gradle/
+build/
+**/build/
+**/.cxx/
+local.properties
+*.apk
+*.aab
+*.aar
+*.ap_
+*.dex
+*.class
+*.jar
+!gradle/wrapper/gradle-wrapper.jar
+captures/
+
+# Native builds
+out/
+bin/
+obj/
+*.o
+*.obj
+*.a
+*.so
+*.dll
+*.exe
+compile_commands.json
+
+# IDE / OS / local state
+.idea/
+.vscode/
+*.iml
+*.log
+.env*
+.DS_Store
+Thumbs.db
+*.tmp
+*.swp
+
+# Hardware evidence is opt-in; raw captures may contain device data
+docs/hardware/private/
+*.bin
+*.hex
