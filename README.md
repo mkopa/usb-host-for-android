@@ -2,7 +2,7 @@
 
 Native-first Android USB Host SDK for professional service, diagnostics, and embedded development.
 The current release supports **STLINK-V3 over Android USB OTG** and provides non-destructive access
-to STM32G0B0RET6 targets without root.
+to [STM32G0B0RET6](https://stm32g0b0ret6.pages.dev) targets without root.
 
 > **Platform status:** Android is supported and hardware-validated. Desktop/native hosts and Rust
 > bindings are experimental and remain in validation; they are not compatibility promises yet.
