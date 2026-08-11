@@ -27,7 +27,7 @@ merges only after required local commands pass and their results are recorded in
 
 **Purpose**: Establish task delivery, compatibility baselines, and reusable verification entrypoints.
 
-- [ ] T001 Add public-safe task issue forms and the `dev` pull-request checklist in `.github/ISSUE_TEMPLATE/feature-task.yml` and `.github/pull_request_template.md`
+- [X] T001 Add public-safe task issue forms and the `dev` pull-request checklist in `.github/ISSUE_TEMPLATE/feature-task.yml` and `.github/pull_request_template.md`
 - [ ] T002 [P] Record existing C symbols, status values, and managed public classes in `native-tests/public-symbols-baseline.txt` and `usbHostForAndroid/src/test/resources/public-managed-api-baseline.txt`
 - [ ] T003 Add idempotent task-marker and one-task/one-issue validation to `scripts/verify-spec-task-issues.ps1`
 - [ ] T004 Add one-command host sanitizer and task/PR policy verification in `scripts/verify-local.ps1`
