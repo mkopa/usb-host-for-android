@@ -185,6 +185,7 @@ int runLibusbRuntimeContractTest();
 int runStatusContractTest();
 int runTransportErrorTest();
 int runTransportDescriptorTest();
+int runTransportConfigurationTest();
 int runTransportAdditionalDescriptorTest();
 int runTransportRegistryTest();
 int runTransportSessionLifecycleTest();
@@ -204,6 +205,7 @@ int main() {
     CHECK(runStatusContractTest() == 0);
     CHECK(runTransportErrorTest() == 0);
     CHECK(runTransportDescriptorTest() == 0);
+    CHECK(runTransportConfigurationTest() == 0);
     CHECK(runTransportAdditionalDescriptorTest() == 0);
     CHECK(runTransportRegistryTest() == 0);
     CHECK(runTransportSessionLifecycleTest() == 0);

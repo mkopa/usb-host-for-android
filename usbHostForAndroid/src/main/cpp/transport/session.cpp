@@ -1,10 +1,31 @@
 #include "transport/session.hpp"
 
+#include <algorithm>
 #include <exception>
 #include <new>
 #include <utility>
 
 namespace usbhost::transport {
+
+namespace {
+
+void applyGeneration(DeviceDescriptor &device, SnapshotGeneration generation) {
+    device.generation = generation;
+    for (auto &configuration : device.configurations) {
+        configuration.generation = generation;
+        for (auto &interfaceDescriptor : configuration.interfaces) {
+            interfaceDescriptor.generation = generation;
+            for (auto &alternate : interfaceDescriptor.alternateSettings) {
+                alternate.generation = generation;
+                for (auto &endpoint : alternate.endpoints) {
+                    endpoint.generation = generation;
+                }
+            }
+        }
+    }
+}
+
+}  // namespace
 
 std::shared_ptr<TransportSession> TransportSession::open(
         int borrowedFileDescriptor,
@@ -89,12 +110,52 @@ usbhost_status TransportSession::close() {
     return USBHOST_OK;
 }
 
+TransportError TransportSession::selectConfiguration(std::uint8_t configurationValue) {
+    std::lock_guard<std::mutex> lock(mutex_);
+    if (state_ != SessionState::Open || !backend_) {
+        return {USBHOST_INVALID_STATE, 0, "session is not open"};
+    }
+    const auto requested = std::find_if(
+        descriptor_.configurations.begin(), descriptor_.configurations.end(),
+        [configurationValue](const ConfigurationDescriptor &configuration) {
+            return configuration.configurationValue == configurationValue;
+        });
+    if (requested == descriptor_.configurations.end()) {
+        return makeTransportError(BackendStatus::InvalidArgument,
+                                  "configuration value is unavailable");
+    }
+
+    const BackendStatus status = backend_->selectConfiguration(configurationValue);
+    if (status != BackendStatus::Success) {
+        return makeTransportError(status, "configuration selection failed");
+    }
+
+    DeviceDescriptor refreshed = backend_->deviceDescriptor();
+    const auto selected = std::find_if(
+        refreshed.configurations.begin(), refreshed.configurations.end(),
+        [configurationValue](const ConfigurationDescriptor &configuration) {
+            return configuration.configurationValue == configurationValue;
+        });
+    if (selected == refreshed.configurations.end()) {
+        state_ = SessionState::Failed;
+        return makeTransportError(BackendStatus::InternalFailure,
+                                  "backend snapshot omitted selected configuration");
+    }
+    for (auto &configuration : refreshed.configurations) {
+        configuration.active = configuration.configurationValue == configurationValue;
+    }
+    applyGeneration(refreshed, descriptor_.generation.next());
+    descriptor_ = std::move(refreshed);
+    return makeTransportError(BackendStatus::Success, {});
+}
+
 SessionState TransportSession::state() const {
     std::lock_guard<std::mutex> lock(mutex_);
     return state_;
 }
 
-const DeviceDescriptor &TransportSession::descriptorSnapshot() const noexcept {
+DeviceDescriptor TransportSession::descriptorSnapshot() const {
+    std::lock_guard<std::mutex> lock(mutex_);
     return descriptor_;
 }
 

@@ -111,6 +111,7 @@ if(USBHOST_BUILD_TESTS)
         tests/transport_header_contract_test.c
         tests/transport_header_cxx_contract_test.cpp
         tests/transport_additional_descriptor_test.cpp
+        tests/transport_configuration_test.cpp
         tests/transport_descriptor_test.cpp
         tests/transport_registry_test.cpp
         tests/transport_session_lifecycle_test.cpp
