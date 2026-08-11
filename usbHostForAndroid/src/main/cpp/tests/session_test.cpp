@@ -185,6 +185,7 @@ int runLibusbRuntimeContractTest();
 int runStatusContractTest();
 int runTransportErrorTest();
 int runTransportDescriptorTest();
+int runTransportAdditionalDescriptorTest();
 int runTransportRegistryTest();
 int runTransportTypesTest();
 
@@ -202,6 +203,7 @@ int main() {
     CHECK(runStatusContractTest() == 0);
     CHECK(runTransportErrorTest() == 0);
     CHECK(runTransportDescriptorTest() == 0);
+    CHECK(runTransportAdditionalDescriptorTest() == 0);
     CHECK(runTransportRegistryTest() == 0);
     CHECK(runTransportTypesTest() == 0);
     CHECK(usbhost_close(0xdeadbeefULL) == USBHOST_OK);
