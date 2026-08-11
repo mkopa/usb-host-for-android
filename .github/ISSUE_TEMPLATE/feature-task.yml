@@ -1,0 +1,104 @@
+name: Feature task
+description: Track one public, reviewable implementation task
+title: "[feature][TNNN] "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Use this form for one implementation task. Keep all text public-safe: do not include
+        private names, local paths, device identifiers, credentials, or raw hardware logs.
+
+  - type: input
+    id: task_id
+    attributes:
+      label: Task ID
+      description: Stable task identifier from the approved tasks.md file.
+      placeholder: T001
+    validations:
+      required: true
+
+  - type: input
+    id: feature
+    attributes:
+      label: Feature
+      description: Public feature directory or identifier.
+      placeholder: 004-generic-usb-transport
+    validations:
+      required: true
+
+  - type: dropdown
+    id: phase
+    attributes:
+      label: Phase
+      options:
+        - Setup
+        - Foundation
+        - User story 1
+        - User story 2
+        - User story 3
+        - Polish and verification
+    validations:
+      required: true
+
+  - type: textarea
+    id: task
+    attributes:
+      label: Task scope
+      description: Copy the approved task description and exact primary file paths.
+    validations:
+      required: true
+
+  - type: textarea
+    id: dependencies
+    attributes:
+      label: Dependencies
+      description: List prerequisite task or issue IDs, or state `None`.
+      placeholder: None
+    validations:
+      required: true
+
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance checks
+      description: Define observable behavior and the exact local verification commands.
+    validations:
+      required: true
+
+  - type: dropdown
+    id: api_abi
+    attributes:
+      label: API or ABI impact
+      options:
+        - None
+        - Additive public API
+        - Additive public ABI
+        - Additive public API and ABI
+        - Compatibility review required
+    validations:
+      required: true
+
+  - type: dropdown
+    id: hardware
+    attributes:
+      label: Hardware evidence
+      options:
+        - Not required
+        - Non-destructive validation required
+        - Existing sanitized evidence applies
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: delivery
+    attributes:
+      label: Delivery agreement
+      options:
+        - label: I will branch from current `dev` and target `dev` with one task per pull request.
+          required: true
+        - label: I will run and record all required checks locally; GitHub Actions stay disabled.
+          required: true
+        - label: I will preserve stable API/ABI and use the required author and committer identity.
+          required: true
+        - label: I will sanitize public content and perform no destructive hardware operation.
+          required: true
