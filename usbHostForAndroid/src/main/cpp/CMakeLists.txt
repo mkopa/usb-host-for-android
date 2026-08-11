@@ -17,6 +17,7 @@ add_library(usbhost_core STATIC
     core/registry.cpp
     core/c_api.cpp
     transport/error.cpp
+    transport/registry.cpp
     stlink/stlink_usb_layout.c)
 target_include_directories(usbhost_core PUBLIC
     "${CMAKE_CURRENT_LIST_DIR}"
@@ -94,6 +95,7 @@ else()
 endif()
 
 if(USBHOST_BUILD_TESTS)
+    find_package(Threads REQUIRED)
     enable_testing()
     add_executable(usbhost_tests
         tests/session_test.cpp
@@ -102,10 +104,11 @@ if(USBHOST_BUILD_TESTS)
         tests/stlink_usb_contract_test.cpp
         tests/transport_header_contract_test.c
         tests/transport_header_cxx_contract_test.cpp
+        tests/transport_registry_test.cpp
         tests/transport_error_test.cpp
         tests/transport_types_test.cpp
         tests/c_api_contract_test.c
         tests/cxx_api_contract_test.cpp)
-    target_link_libraries(usbhost_tests PRIVATE usbhost_core)
+    target_link_libraries(usbhost_tests PRIVATE usbhost_core Threads::Threads)
     add_test(NAME usbhost_tests COMMAND usbhost_tests)
 endif()
