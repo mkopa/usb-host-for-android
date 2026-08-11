@@ -1,0 +1,84 @@
+name: CI
+
+on:
+  push:
+    branches: [main, dev]
+  pull_request:
+    branches: [main, dev]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  android:
+    name: Android, native and publication contract
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Check out recursive sources
+        uses: actions/checkout@v7
+        with:
+          submodules: recursive
+
+      - name: Validate Gradle wrapper
+        uses: gradle/actions/wrapper-validation@v6
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Gradle cache
+        uses: gradle/actions/setup-gradle@v6
+        with:
+          cache-read-only: ${{ github.ref != 'refs/heads/dev' && github.ref != 'refs/heads/main' }}
+
+      - name: Install pinned Android toolchain
+        shell: bash
+        run: |
+          yes | sdkmanager --licenses >/dev/null
+          sdkmanager \
+            'platforms;android-35' \
+            'platforms;android-37' \
+            'build-tools;37.0.0' \
+            'ndk;28.2.13676358' \
+            'cmake;3.22.1'
+
+      - name: Verify release policy
+        shell: pwsh
+        run: ./scripts/verify-release.ps1 -ExpectedVersion 0.1.0
+
+      - name: Test, lint and assemble Android projects
+        run: ./gradlew --no-daemon test lint assembleDebug assembleRelease
+
+      - name: Verify local Maven publication
+        run: ./gradlew --no-daemon :usbHostForAndroid:verifyReleasePublication
+
+      - name: Compile detached Maven consumer
+        run: ./gradlew --no-daemon -p smoke-tests/android-consumer :consumer:assembleDebug
+
+      - name: Build native contracts
+        run: |
+          cmake -S native-tests -B build/native-tests -DCMAKE_BUILD_TYPE=Debug
+          cmake --build build/native-tests --config Debug --parallel 2
+          ctest --test-dir build/native-tests -C Debug --output-on-failure
+
+      - name: Upload candidate artifacts and reports
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: android-release-candidate-${{ github.sha }}
+          if-no-files-found: warn
+          retention-days: 14
+          path: |
+            usbHostForAndroid/build/outputs/aar/*.aar
+            usbHostForAndroid/build/repository/**
+            usbHostExample/build/outputs/apk/**/*.apk
+            **/build/reports/**
+            build/native-tests/Testing/**

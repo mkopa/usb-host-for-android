@@ -1,6 +1,4 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">USB Host ST-Link</string>
-    <string name="run_probe">Probe ST-Link V3</string>
-    <string name="ready">Attach ST-Link V3, then run the probe.</string>
+    <string name="app_name">USB Host Programmer</string>
 </resources>

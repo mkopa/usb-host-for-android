@@ -1,10 +1,10 @@
 plugins {
     id 'com.android.library'
-    id 'maven-publish'
+    id 'com.vanniktech.maven.publish'
 }
 
 android {
-    namespace 'dev.usbhost.android'
+    namespace 'info.marcin.usbhost'
     compileSdk 35
     ndkVersion '28.2.13676358'
 
@@ -49,12 +49,6 @@ android {
         }
     }
 
-    publishing {
-        singleVariant('release') {
-            withSourcesJar()
-        }
-    }
-
     testOptions {
         unitTests.returnDefaultValues = true
     }
@@ -64,15 +58,104 @@ dependencies {
     testImplementation 'junit:junit:4.13.2'
 }
 
-afterEvaluate {
-    publishing {
-        publications {
-            release(MavenPublication) {
-                from components.release
-                groupId = 'dev.usbhost'
-                artifactId = 'usb-host-for-android'
-                version = '0.1.0-SNAPSHOT'
+mavenPublishing {
+    coordinates(
+            providers.gradleProperty('GROUP').get(),
+            providers.gradleProperty('POM_ARTIFACT_ID').get(),
+            providers.gradleProperty('VERSION_NAME').get())
+
+    publishToMavenCentral(true)
+
+    if (providers.environmentVariable('ORG_GRADLE_PROJECT_signingInMemoryKey').isPresent()
+            || providers.gradleProperty('signingInMemoryKey').isPresent()) {
+        signAllPublications()
+    }
+
+    pom {
+        name = providers.gradleProperty('POM_NAME').get()
+        description = providers.gradleProperty('POM_DESCRIPTION').get()
+        inceptionYear = providers.gradleProperty('POM_INCEPTION_YEAR').get()
+        url = providers.gradleProperty('POM_URL').get()
+        licenses {
+            license {
+                name = providers.gradleProperty('POM_LICENSE_NAME').get()
+                url = providers.gradleProperty('POM_LICENSE_URL').get()
+                distribution = providers.gradleProperty('POM_LICENSE_DIST').get()
             }
+        }
+        developers {
+            developer {
+                id = providers.gradleProperty('POM_DEVELOPER_ID').get()
+                name = providers.gradleProperty('POM_DEVELOPER_NAME').get()
+                url = providers.gradleProperty('POM_DEVELOPER_URL').get()
+            }
+        }
+        scm {
+            url = providers.gradleProperty('POM_SCM_URL').get()
+            connection = providers.gradleProperty('POM_SCM_CONNECTION').get()
+            developerConnection = providers.gradleProperty('POM_SCM_DEV_CONNECTION').get()
+        }
+    }
+}
+
+publishing {
+    repositories {
+        maven {
+            name = 'ReleaseCandidate'
+            url = layout.buildDirectory.dir('repository')
+        }
+    }
+}
+
+tasks.register('verifyReleasePublication') {
+    group = 'verification'
+    description = 'Verifies local 0.1.0 Maven metadata, AAR contents, and namespace linkage.'
+    dependsOn 'publishAllPublicationsToReleaseCandidateRepository'
+
+    doLast {
+        def groupPath = providers.gradleProperty('GROUP').get().replace('.', '/')
+        def artifact = providers.gradleProperty('POM_ARTIFACT_ID').get()
+        def version = providers.gradleProperty('VERSION_NAME').get()
+        if (version.endsWith('-SNAPSHOT')) {
+            throw new GradleException('Release publication cannot use a snapshot version')
+        }
+
+        def releaseDir = layout.buildDirectory.dir(
+                "repository/${groupPath}/${artifact}/${version}").get().asFile
+        def aar = new File(releaseDir, "${artifact}-${version}.aar")
+        def pom = new File(releaseDir, "${artifact}-${version}.pom")
+        def sources = new File(releaseDir, "${artifact}-${version}-sources.jar")
+        def javadoc = new File(releaseDir, "${artifact}-${version}-javadoc.jar")
+        [aar, pom, sources, javadoc].each { required ->
+            if (!required.isFile() || required.length() == 0L) {
+                throw new GradleException("Missing or empty publication artifact: ${required}")
+            }
+        }
+
+        def pomText = pom.getText('UTF-8')
+        ['<groupId>info.marcin.usbhost</groupId>', '<artifactId>usb-host-for-android</artifactId>',
+         '<version>0.1.0</version>', '<name>USB Host for Android</name>'].each { required ->
+            if (!pomText.contains(required)) {
+                throw new GradleException("POM contract is missing: ${required}")
+            }
+        }
+
+        copy {
+            from zipTree(aar)
+            into layout.buildDirectory.dir('verified-aar')
+        }
+        def classesJar = layout.buildDirectory.file('verified-aar/classes.jar').get().asFile
+        if (!classesJar.isFile()) {
+            throw new GradleException('AAR does not contain classes.jar')
+        }
+        def classEntries = zipTree(classesJar).files.collect {
+            it.path.replace('\\', '/')
+        }.join('\n')
+        if (!classEntries.contains('info/marcin/usbhost/StlinkSession.class')) {
+            throw new GradleException('Required public namespace is absent from classes.jar')
+        }
+        if (classEntries.contains('dev/usbhost/android/')) {
+            throw new GradleException('Previous development namespace remains in classes.jar')
         }
     }
 }

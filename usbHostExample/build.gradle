@@ -1,26 +1,44 @@
 plugins {
     id 'com.android.application'
+    id 'org.jetbrains.kotlin.plugin.compose'
 }
 
 android {
-    namespace 'dev.usbhost.example'
-    compileSdk 35
+    namespace 'info.marcin.usbhost.example'
+    compileSdk 37
 
     defaultConfig {
-        applicationId 'dev.usbhost.example'
+        applicationId 'info.marcin.usbhost.example'
         minSdk 23
         targetSdk 35
         versionCode 1
-        versionName '0.1.0'
+        versionName providers.gradleProperty('VERSION_NAME').get()
     }
 
     compileOptions {
         sourceCompatibility JavaVersion.VERSION_17
         targetCompatibility JavaVersion.VERSION_17
     }
+
+    buildFeatures {
+        compose true
+    }
+
+    testOptions {
+        unitTests.returnDefaultValues = true
+    }
 }
 
 dependencies {
     implementation project(':usbHostForAndroid')
-    implementation 'androidx.core:core:1.15.0'
+
+    def composeBom = platform("androidx.compose:compose-bom:${providers.gradleProperty('COMPOSE_BOM_VERSION').get()}")
+    implementation composeBom
+    implementation 'androidx.activity:activity-compose:1.13.0'
+    implementation 'androidx.compose.material3:material3'
+    implementation 'androidx.compose.ui:ui'
+    implementation 'androidx.compose.ui:ui-tooling-preview'
+    debugImplementation 'androidx.compose.ui:ui-tooling'
+
+    testImplementation 'junit:junit:4.13.2'
 }

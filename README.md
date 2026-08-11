@@ -4,6 +4,10 @@ Native-first Android USB Host SDK for professional service, diagnostics, and emb
 The current release supports **STLINK-V3 over Android USB OTG** and provides non-destructive access
 to [STM32G0B0RET6](https://stm32g0b0ret6.pages.dev) targets without root.
 
+> **0.1.0 release candidate:** the public API now uses the exact namespace
+> `info.marcin.usbhost`. Maven Central publication is configured but intentionally remains pending
+> until the tested `dev` branch is explicitly approved for promotion to `main`.
+
 > **Platform status:** Android is supported and hardware-validated. Desktop/native hosts and Rust
 > bindings are experimental and remain in validation; they are not compatibility promises yet.
 
@@ -72,7 +76,7 @@ cd usb-host-for-android
 ./gradlew.bat :usbHostForAndroid:assembleRelease
 ```
 
-For a local multi-module Android project:
+For the current source checkout:
 
 ```groovy
 dependencies {
@@ -80,24 +84,40 @@ dependencies {
 }
 ```
 
-The library publication coordinates are prepared as
-`dev.usbhost:usb-host-for-android:0.1.0-SNAPSHOT`; no public Maven repository is claimed.
+After the approved 0.1.0 release is published to Maven Central, consumers use:
 
-## Java usage
+```kotlin
+repositories {
+    google()
+    mavenCentral()
+}
 
-The application owns the permission prompt. Perform open/connect/read operations on a worker thread:
-
-```java
-List<StlinkDevice> probes = StlinkProber.findAll(usbManager);
-StlinkDevice probe = probes.get(0); // select explicitly in production
-
-try (StlinkSession session = probe.open(usbManager)) {
-    TargetInfo target = session.connectTarget();
-    byte[] vectorTable = session.readMemory(target.getFlashBase(), 256);
+dependencies {
+    implementation("info.marcin.usbhost:usb-host-for-android:0.1.0")
 }
 ```
 
-The complete Android permission flow is in `usbHostExample`.
+Google Maven remains a dependency source for Android platform libraries. Maven Central is the
+publication repository; the Gradle Plugin Portal is not used because this project publishes an AAR,
+not a Gradle plugin.
+
+## Kotlin usage
+
+The application owns the permission prompt. Perform open/connect/read operations on a worker thread:
+
+```kotlin
+val probes = StlinkProber.findAll(usbManager)
+val probe = probes.first() // select explicitly in production
+
+probe.open(usbManager).use { session ->
+    val target = session.connectTarget()
+    val vectorTable = session.readMemory(target.flashBase, 256)
+}
+```
+
+The complete lifecycle-safe permission flow and polished Compose programmer console are in
+`usbHostExample`. The example shows probe/target facts and a formatted 256-byte flash preview; it
+contains no write, erase, reset, halt, run, step, or register-mutation command.
 
 ## Native C++ usage
 
@@ -128,7 +148,10 @@ must select one explicitly.
 ## Validation
 
 ```powershell
+$env:JAVA_HOME='C:\Program Files\Java\jdk-17'
 ./gradlew.bat clean test assembleDebug
+./gradlew.bat :usbHostForAndroid:verifyReleasePublication
+./gradlew.bat -p smoke-tests/android-consumer :consumer:assembleDebug
 cmake -S native-tests -B build/native-tests
 cmake --build build/native-tests --config Debug
 ctest --test-dir build/native-tests -C Debug --output-on-failure
@@ -137,13 +160,32 @@ ctest --test-dir build/native-tests -C Debug --output-on-failure
 Automated tests use fake transports and never prove physical-device compatibility. Hardware claims
 must have a dated, redacted record under `docs/hardware/`.
 
+## Reproducible build container
+
+```powershell
+docker build -t usb-host-android-runner docker/android-runner
+docker run --rm -v "${PWD}:/workspace" -w /workspace usb-host-android-runner
+```
+
+Automation publishes the same pinned image to
+`ghcr.io/mkopa/usb-host-android-runner:latest`. An optional Docker Hub mirror is enabled only when
+its repository secrets exist.
+
+## Branch and release flow
+
+Create task branches from `dev` and merge them back to `dev` through pull requests. Only an
+explicitly approved promotion from `dev` reaches release-only `main`; an exact `v0.1.0` tag on that
+main commit starts signed Maven Central publication. See [RELEASING.md](RELEASING.md).
+
 ## Repository layout
 
 | Path | Purpose |
 |---|---|
 | `usbHostForAndroid/` | Publishable Android AAR, Prefab headers, native core and adapters |
 | `usbHostExample/` | Minimal permission and integration example |
+| `smoke-tests/android-consumer/` | Detached Maven consumer compile contract |
 | `native-tests/` | Host-native contracts using fake transports |
+| `docker/android-runner/` | Pinned JDK/Android/NDK/CMake build image |
 | `third_party/` | Immutable libusb and stlink Git submodules |
 | `docs/` | Native API and redacted hardware evidence |
 | `specs/` | Spec Kit requirements, plans, contracts, and tasks |

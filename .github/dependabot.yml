@@ -1,0 +1,25 @@
+version: 2
+updates:
+  - package-ecosystem: gradle
+    directory: /
+    schedule:
+      interval: weekly
+    target-branch: dev
+    groups:
+      android-build:
+        patterns: ['*']
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    target-branch: dev
+  - package-ecosystem: gitsubmodule
+    directory: /
+    schedule:
+      interval: weekly
+    target-branch: dev
+  - package-ecosystem: docker
+    directory: /docker/android-runner
+    schedule:
+      interval: weekly
+    target-branch: dev
