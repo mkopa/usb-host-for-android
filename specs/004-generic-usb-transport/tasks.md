@@ -48,7 +48,7 @@ Android event runtime required by every user story.
 - [X] T009 Add scripted completion tests, the portable backend interface, and deterministic fake transport in `usbHostForAndroid/src/main/cpp/tests/scripted_usb_backend_test.cpp`, `usbHostForAndroid/src/main/cpp/transport/backend.hpp`, and `usbHostForAndroid/src/main/cpp/tests/scripted_usb_backend.hpp`
 - [X] T010 [P] Add stale-generation/concurrent-access tests and a generation-safe transport registry in `usbHostForAndroid/src/main/cpp/tests/transport_registry_test.cpp`, `usbHostForAndroid/src/main/cpp/transport/registry.hpp`, and `usbHostForAndroid/src/main/cpp/transport/registry.cpp`
 - [X] T011 Add lifecycle tests and the reference-counted no-discovery libusb context/event-thread runtime in `usbHostForAndroid/src/main/cpp/tests/libusb_runtime_contract_test.cpp`, `usbHostForAndroid/src/main/cpp/android/libusb_runtime.hpp`, and `usbHostForAndroid/src/main/cpp/android/libusb_runtime.cpp`
-- [ ] T012 [P] Add validation/value tests and immutable direction, transfer-type, result, exception, and control-request classes in `usbHostForAndroid/src/test/java/info/marcin/usbhost/transport/TransportValueTypesTest.java` and `usbHostForAndroid/src/main/java/info/marcin/usbhost/transport/`
+- [X] T012 [P] Add validation/value tests and immutable direction, transfer-type, result, exception, and control-request classes in `usbHostForAndroid/src/test/java/info/marcin/usbhost/transport/TransportValueTypesTest.java` and `usbHostForAndroid/src/main/java/info/marcin/usbhost/transport/`
 
 **Checkpoint**: The additive contracts compile, compatibility baselines are recorded, fake completions
 are deterministic, and the Android runtime can be acquired/released without scanning USB devices.
