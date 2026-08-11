@@ -34,8 +34,9 @@ public:
     TransportSession &operator=(const TransportSession &) = delete;
 
     usbhost_status close();
+    TransportError selectConfiguration(std::uint8_t configurationValue);
     SessionState state() const;
-    const DeviceDescriptor &descriptorSnapshot() const noexcept;
+    DeviceDescriptor descriptorSnapshot() const;
 
 private:
     TransportSession(std::unique_ptr<UsbBackend> backend, DeviceDescriptor descriptor);
