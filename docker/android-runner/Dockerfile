@@ -1,4 +1,4 @@
-FROM eclipse-temurin:17-jdk-jammy
+FROM eclipse-temurin:25-jdk-jammy
 
 ARG ANDROID_COMMAND_LINE_TOOLS=13114758
 ARG ANDROID_API=37
