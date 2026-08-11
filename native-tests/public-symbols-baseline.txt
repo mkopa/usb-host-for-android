@@ -1,0 +1,27 @@
+# Public C ABI baseline captured before the generic USB transport API.
+# Existing entries are immutable. Future compatible releases may only append symbols and statuses.
+
+[symbols]
+usbhost_abi_version
+usbhost_close
+usbhost_connect_target
+usbhost_last_error
+usbhost_last_status
+usbhost_open_stlink_v3_fd
+usbhost_read_memory
+usbhost_status_name
+
+[statuses]
+USBHOST_OK=0
+USBHOST_INVALID_ARGUMENT=1
+USBHOST_PERMISSION_DENIED=2
+USBHOST_UNSUPPORTED_DEVICE=3
+USBHOST_USB_ERROR=4
+USBHOST_TIMEOUT=5
+USBHOST_DISCONNECTED=6
+USBHOST_PROGRAMMER_ERROR=7
+USBHOST_TARGET_NOT_FOUND=8
+USBHOST_UNSUPPORTED_TARGET=9
+USBHOST_INVALID_STATE=10
+USBHOST_BUSY=11
+USBHOST_INTERNAL_ERROR=12
