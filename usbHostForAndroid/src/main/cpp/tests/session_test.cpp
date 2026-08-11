@@ -187,6 +187,7 @@ int runTransportErrorTest();
 int runTransportDescriptorTest();
 int runTransportAdditionalDescriptorTest();
 int runTransportRegistryTest();
+int runTransportSessionLifecycleTest();
 int runTransportTypesTest();
 
 int main() {
@@ -205,6 +206,7 @@ int main() {
     CHECK(runTransportDescriptorTest() == 0);
     CHECK(runTransportAdditionalDescriptorTest() == 0);
     CHECK(runTransportRegistryTest() == 0);
+    CHECK(runTransportSessionLifecycleTest() == 0);
     CHECK(runTransportTypesTest() == 0);
     CHECK(usbhost_close(0xdeadbeefULL) == USBHOST_OK);
     if (failures != 0) {
