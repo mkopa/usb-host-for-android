@@ -32,7 +32,10 @@ typedef enum usbhost_status {
     USBHOST_UNSUPPORTED_TARGET = 9,
     USBHOST_INVALID_STATE = 10,
     USBHOST_BUSY = 11,
-    USBHOST_INTERNAL_ERROR = 12
+    USBHOST_INTERNAL_ERROR = 12,
+    USBHOST_STALL = 13,
+    USBHOST_CANCELLED = 14,
+    USBHOST_UNSUPPORTED_OPERATION = 15
 } usbhost_status;
 
 typedef struct usbhost_programmer_info {

@@ -96,6 +96,7 @@ if(USBHOST_BUILD_TESTS)
     enable_testing()
     add_executable(usbhost_tests
         tests/session_test.cpp
+        tests/status_contract_test.cpp
         tests/stlink_usb_contract_test.cpp
         tests/c_api_contract_test.c
         tests/cxx_api_contract_test.cpp)
