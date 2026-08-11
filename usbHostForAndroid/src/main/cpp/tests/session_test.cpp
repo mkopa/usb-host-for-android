@@ -180,6 +180,7 @@ void terminalFailureTest() {
 }  // namespace
 
 int runStlinkUsbContractTest();
+int runScriptedUsbBackendTest();
 int runStatusContractTest();
 int runTransportErrorTest();
 int runTransportTypesTest();
@@ -193,6 +194,7 @@ int main() {
     invalidRangeTest();
     terminalFailureTest();
     CHECK(runStlinkUsbContractTest() == 0);
+    CHECK(runScriptedUsbBackendTest() == 0);
     CHECK(runStatusContractTest() == 0);
     CHECK(runTransportErrorTest() == 0);
     CHECK(runTransportTypesTest() == 0);
