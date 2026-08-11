@@ -75,6 +75,7 @@ usbhost_status parseConfiguration(const std::vector<std::uint8_t> &raw,
     const std::uint8_t expectedInterfaces = raw[4];
 
     AlternateSettingDescriptor *currentAlternate = nullptr;
+    EndpointDescriptor *currentEndpoint = nullptr;
     std::uint8_t expectedEndpoints = 0;
     std::size_t offset = raw[0];
     while (offset < raw.size()) {
@@ -89,6 +90,9 @@ usbhost_status parseConfiguration(const std::vector<std::uint8_t> &raw,
 
         if (type == kConfigurationDescriptorType) {
             return fail(diagnostic, "duplicate configuration header");
+        }
+        if (type == kDeviceDescriptorType) {
+            return fail(diagnostic, "device descriptor cannot be nested in a configuration");
         }
         if (type == kInterfaceDescriptorType) {
             if (length < kInterfaceDescriptorLength) {
@@ -130,6 +134,7 @@ usbhost_status parseConfiguration(const std::vector<std::uint8_t> &raw,
             alternate.generation = generation;
             interfaceIterator->alternateSettings.push_back(std::move(alternate));
             currentAlternate = &interfaceIterator->alternateSettings.back();
+            currentEndpoint = nullptr;
             expectedEndpoints = raw[offset + 4];
         } else if (type == kEndpointDescriptorType) {
             if (length < kEndpointDescriptorLength || currentAlternate == nullptr) {
@@ -158,6 +163,19 @@ usbhost_status parseConfiguration(const std::vector<std::uint8_t> &raw,
             endpoint.alternateSetting = currentAlternate->alternateSetting;
             endpoint.generation = generation;
             currentAlternate->endpoints.push_back(std::move(endpoint));
+            currentEndpoint = &currentAlternate->endpoints.back();
+        } else {
+            AdditionalDescriptor additional;
+            additional.type = type;
+            additional.bytes.assign(raw.begin() + static_cast<std::ptrdiff_t>(offset),
+                                    raw.begin() + static_cast<std::ptrdiff_t>(offset + length));
+            if (currentEndpoint != nullptr) {
+                currentEndpoint->additionalDescriptors.push_back(std::move(additional));
+            } else if (currentAlternate != nullptr) {
+                currentAlternate->additionalDescriptors.push_back(std::move(additional));
+            } else {
+                candidate.additionalDescriptors.push_back(std::move(additional));
+            }
         }
         offset += length;
     }
