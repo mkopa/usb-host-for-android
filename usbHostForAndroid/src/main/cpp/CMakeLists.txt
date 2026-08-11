@@ -86,7 +86,8 @@ if(ANDROID)
 
     add_library(usbhost SHARED
         stlink/stlink_backend.cpp
-        jni/jni_bridge.cpp)
+        jni/jni_bridge.cpp
+        jni/transport_jni.cpp)
     target_include_directories(usbhost PRIVATE
         "${CMAKE_CURRENT_LIST_DIR}"
         "${CMAKE_CURRENT_LIST_DIR}/include"
@@ -118,6 +119,7 @@ if(USBHOST_BUILD_TESTS)
         tests/transport_configuration_test.cpp
         tests/transport_descriptor_test.cpp
         tests/transport_interface_test.cpp
+        tests/transport_jni_contract_test.cpp
         tests/transport_c_api_session_test.c
         tests/transport_registry_test.cpp
         tests/transport_session_lifecycle_test.cpp
