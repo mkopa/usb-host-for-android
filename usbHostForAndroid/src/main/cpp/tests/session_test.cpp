@@ -183,6 +183,7 @@ int runStlinkUsbContractTest();
 int runScriptedUsbBackendTest();
 int runStatusContractTest();
 int runTransportErrorTest();
+int runTransportRegistryTest();
 int runTransportTypesTest();
 
 int main() {
@@ -197,6 +198,7 @@ int main() {
     CHECK(runScriptedUsbBackendTest() == 0);
     CHECK(runStatusContractTest() == 0);
     CHECK(runTransportErrorTest() == 0);
+    CHECK(runTransportRegistryTest() == 0);
     CHECK(runTransportTypesTest() == 0);
     CHECK(usbhost_close(0xdeadbeefULL) == USBHOST_OK);
     if (failures != 0) {
