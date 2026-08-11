@@ -181,6 +181,7 @@ void terminalFailureTest() {
 
 int runStlinkUsbContractTest();
 int runStatusContractTest();
+int runTransportTypesTest();
 
 int main() {
     lifecycleTest();
@@ -192,6 +193,7 @@ int main() {
     terminalFailureTest();
     CHECK(runStlinkUsbContractTest() == 0);
     CHECK(runStatusContractTest() == 0);
+    CHECK(runTransportTypesTest() == 0);
     CHECK(usbhost_close(0xdeadbeefULL) == USBHOST_OK);
     if (failures != 0) {
         std::cerr << failures << " native test(s) failed\n";
