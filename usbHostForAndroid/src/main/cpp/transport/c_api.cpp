@@ -225,6 +225,14 @@ usbhost_status usbhost_transport_open_fd(
     } catch (...) { return internalFailure(); }
 }
 
+usbhost_status usbhost_transport_cancel(usbhost_transport_session handle) {
+    try {
+        auto session = findSession(handle);
+        if (!session) return finish(USBHOST_INVALID_STATE, "unknown session");
+        return finish(USBHOST_INVALID_STATE, "no active transfer");
+    } catch (...) { return internalFailure(); }
+}
+
 usbhost_status usbhost_transport_close(usbhost_transport_session handle) {
     if (handle == USBHOST_TRANSPORT_INVALID_SESSION) return finish(USBHOST_OK);
     try {

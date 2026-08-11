@@ -14,6 +14,7 @@ USBHOST_1.0 {
         Java_info_marcin_usbhost_NativeBridge_close;
         Java_info_marcin_usbhost_NativeBridge_lastStatus;
         Java_info_marcin_usbhost_NativeBridge_lastError;
+        Java_info_marcin_usbhost_transport_TransportNativeBridge_*;
     local:
         *;
 };
