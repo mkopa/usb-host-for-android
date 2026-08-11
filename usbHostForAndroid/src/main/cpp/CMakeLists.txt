@@ -13,6 +13,7 @@ set(USBHOST_STLINK_DIR "${USBHOST_REPO_ROOT}/third_party/stlink")
 set(USBHOST_LIBUSB_DIR "${USBHOST_REPO_ROOT}/third_party/libusb")
 
 add_library(usbhost_core STATIC
+    android/android_usb_backend.cpp
     android/libusb_runtime.cpp
     core/session.cpp
     core/registry.cpp
@@ -104,6 +105,7 @@ if(USBHOST_BUILD_TESTS)
     enable_testing()
     add_executable(usbhost_tests
         tests/session_test.cpp
+        tests/android_usb_backend_contract_test.cpp
         tests/libusb_runtime_contract_test.cpp
         tests/scripted_usb_backend_test.cpp
         tests/status_contract_test.cpp
