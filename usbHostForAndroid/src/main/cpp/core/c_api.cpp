@@ -135,6 +135,9 @@ const char *usbhost_status_name(usbhost_status status) {
         case USBHOST_INVALID_STATE: return "INVALID_STATE";
         case USBHOST_BUSY: return "BUSY";
         case USBHOST_INTERNAL_ERROR: return "INTERNAL_ERROR";
+        case USBHOST_STALL: return "STALL";
+        case USBHOST_CANCELLED: return "CANCELLED";
+        case USBHOST_UNSUPPORTED_OPERATION: return "UNSUPPORTED_OPERATION";
         default: return "UNKNOWN_STATUS";
     }
 }
