@@ -5,6 +5,7 @@
 #include <string>
 
 #include "core/backend.hpp"
+#include "core/c_api_state.hpp"
 #include "core/registry.hpp"
 
 namespace {
@@ -33,6 +34,16 @@ bool validTargetOutput(const usbhost_target_info *value) {
 }
 
 }  // namespace
+
+namespace usbhost::detail {
+
+usbhost_status setLastResult(usbhost_status status, std::string_view diagnostic) {
+    lastStatus = status;
+    lastError.assign(diagnostic.data(), diagnostic.size());
+    return status;
+}
+
+}  // namespace usbhost::detail
 
 extern "C" {
 
