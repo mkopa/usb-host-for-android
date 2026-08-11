@@ -17,6 +17,7 @@ add_library(usbhost_core STATIC
     core/session.cpp
     core/registry.cpp
     core/c_api.cpp
+    transport/descriptors.cpp
     transport/error.cpp
     transport/registry.cpp
     stlink/stlink_usb_layout.c)
@@ -108,6 +109,7 @@ if(USBHOST_BUILD_TESTS)
         tests/stlink_usb_contract_test.cpp
         tests/transport_header_contract_test.c
         tests/transport_header_cxx_contract_test.cpp
+        tests/transport_descriptor_test.cpp
         tests/transport_registry_test.cpp
         tests/transport_error_test.cpp
         tests/transport_types_test.cpp
