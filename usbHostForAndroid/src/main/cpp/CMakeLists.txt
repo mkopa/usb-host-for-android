@@ -113,6 +113,7 @@ if(USBHOST_BUILD_TESTS)
         tests/transport_additional_descriptor_test.cpp
         tests/transport_configuration_test.cpp
         tests/transport_descriptor_test.cpp
+        tests/transport_interface_test.cpp
         tests/transport_registry_test.cpp
         tests/transport_session_lifecycle_test.cpp
         tests/transport_error_test.cpp

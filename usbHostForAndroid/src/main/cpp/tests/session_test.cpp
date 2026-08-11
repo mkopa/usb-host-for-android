@@ -186,6 +186,7 @@ int runStatusContractTest();
 int runTransportErrorTest();
 int runTransportDescriptorTest();
 int runTransportConfigurationTest();
+int runTransportInterfaceTest();
 int runTransportAdditionalDescriptorTest();
 int runTransportRegistryTest();
 int runTransportSessionLifecycleTest();
@@ -206,6 +207,7 @@ int main() {
     CHECK(runTransportErrorTest() == 0);
     CHECK(runTransportDescriptorTest() == 0);
     CHECK(runTransportConfigurationTest() == 0);
+    CHECK(runTransportInterfaceTest() == 0);
     CHECK(runTransportAdditionalDescriptorTest() == 0);
     CHECK(runTransportRegistryTest() == 0);
     CHECK(runTransportSessionLifecycleTest() == 0);

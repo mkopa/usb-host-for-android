@@ -5,12 +5,23 @@
 #include <memory>
 #include <mutex>
 #include <string>
+#include <unordered_map>
 
 #include "transport/backend.hpp"
 #include "transport/error.hpp"
 #include "transport/registry.hpp"
 
 namespace usbhost::transport {
+
+struct InterfaceClaimToken {
+    std::uint8_t interfaceNumber{0};
+    std::uint64_t claimGeneration{0};
+    SnapshotGeneration snapshotGeneration;
+
+    bool isValid() const noexcept {
+        return claimGeneration != 0 && snapshotGeneration.isValid();
+    }
+};
 
 class AuthorizedBackendFactory {
 public:
@@ -35,6 +46,13 @@ public:
 
     usbhost_status close();
     TransportError selectConfiguration(std::uint8_t configurationValue);
+    TransportError claimInterface(std::uint8_t interfaceNumber,
+                                  InterfaceClaimToken &outToken);
+    TransportError selectAlternateSetting(InterfaceClaimToken &token,
+                                          std::uint8_t alternateSetting);
+    TransportError releaseInterface(const InterfaceClaimToken &token);
+    TransportError validateEndpoint(const InterfaceClaimToken &token,
+                                    const EndpointDescriptor &endpoint) const;
     SessionState state() const;
     DeviceDescriptor descriptorSnapshot() const;
 
@@ -45,6 +63,8 @@ private:
     std::condition_variable closedCondition_;
     std::unique_ptr<UsbBackend> backend_;
     DeviceDescriptor descriptor_;
+    std::unordered_map<std::uint8_t, InterfaceClaimToken> claims_;
+    std::uint64_t nextClaimGeneration_{1};
     SessionState state_{SessionState::Opening};
 };
 
