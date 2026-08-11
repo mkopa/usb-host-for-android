@@ -13,6 +13,7 @@ set(USBHOST_STLINK_DIR "${USBHOST_REPO_ROOT}/third_party/stlink")
 set(USBHOST_LIBUSB_DIR "${USBHOST_REPO_ROOT}/third_party/libusb")
 
 add_library(usbhost_core STATIC
+    android/libusb_runtime.cpp
     core/session.cpp
     core/registry.cpp
     core/c_api.cpp
@@ -29,6 +30,8 @@ if(ANDROID)
        NOT EXISTS "${USBHOST_STLINK_DIR}/src/stlink-lib/usb.c")
         message(FATAL_ERROR "Missing third-party sources. Run git submodule update --init --recursive")
     endif()
+
+    target_include_directories(usbhost_core PRIVATE "${USBHOST_LIBUSB_DIR}/libusb")
 
     add_library(usb-1.0 SHARED
         "${USBHOST_LIBUSB_DIR}/libusb/core.c"
@@ -99,6 +102,7 @@ if(USBHOST_BUILD_TESTS)
     enable_testing()
     add_executable(usbhost_tests
         tests/session_test.cpp
+        tests/libusb_runtime_contract_test.cpp
         tests/scripted_usb_backend_test.cpp
         tests/status_contract_test.cpp
         tests/stlink_usb_contract_test.cpp
