@@ -1,0 +1,11 @@
+# Public managed API baseline captured before the generic USB transport package.
+# Existing entries are immutable. Future compatible releases may only append public types.
+
+class info.marcin.usbhost.ProgrammerInfo
+class info.marcin.usbhost.StlinkDevice
+class info.marcin.usbhost.StlinkException
+class info.marcin.usbhost.StlinkProber
+class info.marcin.usbhost.StlinkSession
+enum info.marcin.usbhost.StlinkStatus
+class info.marcin.usbhost.StlinkUsbIds
+class info.marcin.usbhost.TargetInfo
