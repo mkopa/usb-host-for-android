@@ -87,4 +87,6 @@ USBHOST_API const char *usbhost_last_error(void);
 }
 #endif
 
+#include "transport.h"
+
 #endif
