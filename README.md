@@ -20,6 +20,7 @@ to [STM32G0B0RET6](https://stm32g0b0ret6.pages.dev) targets without root.
 | STM32G0B0RET6 | **Supported** | Chip ID `0x467`, flash/SRAM identification and bounded reads |
 | Java / Kotlin consumers | **Supported** | Small lifecycle-safe API |
 | Android C++ consumers | **Supported** | Stable C ABI published through Prefab |
+| Generic USB transport | **Available** | Descriptor/configuration/claim plus control, bulk, interrupt primitives |
 | Windows/Linux/macOS | Experimental | Portable core available; host backends are in validation |
 | Rust | Experimental | C ABI is bindgen-ready; first-party crate is not released |
 
@@ -118,6 +119,31 @@ probe.open(usbManager).use { session ->
 The complete lifecycle-safe permission flow and polished Compose programmer console are in
 `usbHostExample`. The example shows probe/target facts and a formatted 256-byte flash preview; it
 contains no write, erase, reset, halt, run, step, or register-mutation command.
+
+## Generic transport
+
+Applications and protocol adapters can use `info.marcin.usbhost.transport` after Android
+`UsbManager` grants permission and opens a caller-owned `UsbDeviceConnection`:
+
+```kotlin
+withContext(Dispatchers.IO) {
+    GenericUsbDevice.open(device, connection).use { usb ->
+        val descriptors = usb.configurations
+        // Select, claim, and transfer only according to a validated protocol adapter.
+    }
+}
+connection.close()
+```
+
+Blocking lifecycle and transfer calls reject the main thread. The library owns only a duplicated
+native file descriptor; it does not close the application connection. Control transfers are limited
+to 65,535 bytes, bulk/interrupt transfers to 1 MiB, timeouts to 1–60,000 ms, and close to a two-second
+cleanup bound. Explicit configuration selection requires zero claims and invalidates earlier
+endpoint snapshots.
+
+These primitives do not by themselves claim compatibility with serial, DFU, CMSIS-DAP, HID,
+printers, analyzers, other programmers, or arbitrary desktop libusb applications. See the complete
+[generic transport guide](docs/transport.md) and [minimal adapter example](docs/transport-adapter-example.md).
 
 ## Native C++ usage
 
