@@ -251,3 +251,35 @@ accepted 2-second cancellation requirement and multiple-session scale; per-sessi
 would consume more resources and synchronous libusb calls cannot provide the required cancellation
 contract. The GitHub one-task/one-PR workflow adds delivery overhead by explicit user requirement,
 not product architecture.
+
+## Post-Design Validation (2026-08-12)
+
+### Quickstart execution
+
+- **PASS — source preparation**: recursive submodules initialized and the worktree contained no
+  tracked generated binary.
+- **PASS — deterministic native contracts**: the complete fake-backend CTest suite passed. An
+  unavailable generator recorded in an old CMake cache was eliminated by the verifier's clean,
+  explicitly selected Clang/Ninja build; the quickstart now uses that reproducible entry point.
+- **PASS — managed and Android packaging**: unit tests, lint, release AAR assembly, publication
+  verification, and the detached Android consumer build passed. The quickstart now exports the SDK
+  resolved from `local.properties` when an invoking shell has no Android SDK environment variable.
+- **PASS — compatibility and cleanliness**: publication verification found the expected 28 stable
+  C ABI symbols in all six JNI/Prefab libraries, and `git diff --check` passed.
+- **NOT RUN — optional hardware smoke**: no hardware result is required for generic transport; no
+  connected device was opened, claimed, transferred, reset, written, erased, or otherwise changed.
+- **PASS — GitHub readiness**: issues are enabled and the authenticated maintainer permission is
+  `ADMIN`. Actions remain disabled and local evidence remains the merge gate.
+
+### Constitution and compatibility result
+
+**PASS**. The delivered implementation preserves the portable C++17 core and thin Android/JNI
+adapters, application-owned `UsbDeviceConnection` lifecycle, worker-thread-only blocking calls,
+fake-transport automation, bounded error and descriptor data, and non-destructive evidence policy.
+It adds no runtime dependency and introduces no constitution exception.
+
+Compatibility is additive: the managed baseline remains available, all 28 published C ABI symbols
+are present for `arm64-v8a`, `armeabi-v7a`, and `x86_64`, Prefab headers and source/Javadoc artifacts
+are consumable, and the existing read-only STLINK surface retains its signatures and denial of
+mutating operations. No API or ABI break was detected. This feature is ready on `dev` for maintainer
+testing; promotion to release-only `main` remains a separate decision.

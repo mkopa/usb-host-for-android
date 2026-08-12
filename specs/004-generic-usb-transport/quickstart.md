@@ -24,18 +24,32 @@ Expected: submodules are present and no generated binary is tracked.
 ## 2. Run deterministic native contracts
 
 ```powershell
-cmake -S native-tests -B build/native-tests -DCMAKE_BUILD_TYPE=Debug
-cmake --build build/native-tests --config Debug --parallel 2
-ctest --test-dir build/native-tests -C Debug --output-on-failure
+pwsh ./scripts/verify-local.ps1 -SkipAndroid -SkipPublication -SkipGitHub
 ```
 
 Expected: descriptor, configuration, claim, transfer, cancellation, disconnect, race, ABI, and
 STLINK regression contracts pass against the scripted fake backend. No physical USB device is
-required.
+required. The verifier selects the available Clang/Ninja toolchain and recreates its generated
+native build directory, so a stale CMake generator cache cannot affect the result.
 
 ## 3. Validate managed API and Android packaging
 
 ```powershell
+# A detached Gradle build cannot read the repository-root local.properties. Export its SDK first
+# when the shell does not already provide ANDROID_HOME or ANDROID_SDK_ROOT.
+if (-not $env:ANDROID_HOME -and -not $env:ANDROID_SDK_ROOT) {
+    $sdkLine = Get-Content ./local.properties |
+        Where-Object { $_ -match '^sdk\.dir=' } |
+        Select-Object -First 1
+    if (-not $sdkLine) { throw 'Set ANDROID_HOME or ANDROID_SDK_ROOT.' }
+    $sdk = $sdkLine.Substring($sdkLine.IndexOf('=') + 1).Replace('\:', ':').Replace('\\', '\')
+    if (-not (Test-Path -LiteralPath $sdk -PathType Container)) {
+        throw 'Set ANDROID_HOME or ANDROID_SDK_ROOT to an installed Android SDK.'
+    }
+    $env:ANDROID_HOME = $sdk
+    $env:ANDROID_SDK_ROOT = $sdk
+}
+
 ./gradlew.bat --no-daemon :usbHostForAndroid:test :usbHostForAndroid:lint
 ./gradlew.bat --no-daemon :usbHostForAndroid:assembleRelease
 ./gradlew.bat --no-daemon :usbHostForAndroid:verifyReleasePublication
