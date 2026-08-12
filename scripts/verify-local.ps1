@@ -268,6 +268,7 @@ try {
             Invoke-Checked (Join-Path $repo 'gradlew.bat') @(
                 '--no-daemon',
                 '-p', (Join-Path $repo 'smoke-tests\android-consumer'),
+                ':consumer:testDebugUnitTest',
                 ':consumer:assembleDebug'
             ) 'Build detached Android consumer'
         }

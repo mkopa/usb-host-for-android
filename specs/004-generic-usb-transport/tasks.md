@@ -107,7 +107,7 @@ complete deterministically with no leak, race, deadlock, or uninitialized-byte e
 - [X] T033 [US2] Add JNI slice/partial-copy/exception tests and implement bounded caller-buffer marshalling in `usbHostForAndroid/src/main/cpp/tests/transport_jni_transfer_test.cpp` and `usbHostForAndroid/src/main/cpp/jni/transport_jni.cpp`
 - [X] T034 [US2] Add control request/result/main-thread tests and expose guarded control transfer and cancellation in `usbHostForAndroid/src/test/java/info/marcin/usbhost/transport/GenericUsbControlTransferTest.java` and `usbHostForAndroid/src/main/java/info/marcin/usbhost/transport/GenericUsbDevice.java`
 - [X] T035 [US2] Add endpoint ownership/type/partial-result tests and expose guarded bulk/interrupt transfers in `usbHostForAndroid/src/test/java/info/marcin/usbhost/transport/GenericUsbEndpointTransferTest.java` and `usbHostForAndroid/src/main/java/info/marcin/usbhost/transport/GenericUsbInterface.java`
-- [ ] T036 [US2] Extend the detached Maven consumer with scripted transfer compile/use contracts in `smoke-tests/android-consumer/src/main/java/info/marcin/usbhost/consumer/GenericTransferConsumer.java` and `smoke-tests/android-consumer/src/test/java/info/marcin/usbhost/consumer/GenericTransferApiTest.java`
+- [X] T036 [US2] Extend the detached Maven consumer with scripted transfer compile/use contracts in `smoke-tests/android-consumer/src/main/java/info/marcin/usbhost/consumer/GenericTransferConsumer.java` and `smoke-tests/android-consumer/src/test/java/info/marcin/usbhost/consumer/GenericTransferApiTest.java`
 
 **Checkpoint**: User Stories 1 and 2 provide the full public generic synchronous transport with no
 protocol-specific adapter or physical hardware requirement.
