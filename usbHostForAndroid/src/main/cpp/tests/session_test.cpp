@@ -194,6 +194,7 @@ int runTransportCancellationTest();
 int runTransportControlTransferTest();
 int runTransportInterfaceTest();
 int runTransportJniContractTest();
+int runTransportJniTransferTest();
 extern "C" int runTransportCApiSessionTest(void);
 extern "C" int runTransportCApiTransferTest(void);
 int runTransportAdditionalDescriptorTest();
@@ -226,6 +227,7 @@ int main() {
     CHECK(runTransportControlTransferTest() == 0);
     CHECK(runTransportInterfaceTest() == 0);
     CHECK(runTransportJniContractTest() == 0);
+    CHECK(runTransportJniTransferTest() == 0);
     CHECK(runTransportCApiSessionTest() == 0);
     CHECK(runTransportCApiTransferTest() == 0);
     CHECK(runTransportAdditionalDescriptorTest() == 0);
