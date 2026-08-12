@@ -265,6 +265,10 @@ try {
             'Run managed tests, Android lint, assembly, and publication checks'
 
         if (-not $SkipPublication) {
+            Invoke-Checked 'pwsh' @(
+                '-NoProfile', '-File', (Join-Path $repo 'scripts\verify-publication.ps1'),
+                '-RepositoryRoot', $repo
+            ) 'Verify published native symbols'
             Invoke-Checked (Join-Path $repo 'gradlew.bat') @(
                 '--no-daemon',
                 '-p', (Join-Path $repo 'smoke-tests\android-consumer'),
