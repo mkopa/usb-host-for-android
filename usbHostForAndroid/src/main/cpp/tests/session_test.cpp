@@ -186,6 +186,7 @@ int runAndroidUsbBackendContractTest();
 int runStatusContractTest();
 int runTransportErrorTest();
 int runTransportDescriptorTest();
+int runTransportEndpointTransferTest();
 int runTransportConfigurationTest();
 int runTransportControlTransferTest();
 int runTransportInterfaceTest();
@@ -212,6 +213,7 @@ int main() {
     CHECK(runStatusContractTest() == 0);
     CHECK(runTransportErrorTest() == 0);
     CHECK(runTransportDescriptorTest() == 0);
+    CHECK(runTransportEndpointTransferTest() == 0);
     CHECK(runTransportConfigurationTest() == 0);
     CHECK(runTransportControlTransferTest() == 0);
     CHECK(runTransportInterfaceTest() == 0);
