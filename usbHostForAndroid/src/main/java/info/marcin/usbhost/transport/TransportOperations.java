@@ -16,6 +16,8 @@ interface TransportOperations {
     int claimInterface(long session, int value);
     int selectAlternateSetting(long session, int number, int alternate);
     int releaseInterface(long session, int value);
+    long[] controlTransfer(long session, UsbControlRequest request,
+            byte[] buffer, int offset, int length, int timeoutMillis);
     int cancel(long session);
     int close(long session);
     String lastError();
@@ -58,6 +60,12 @@ interface TransportOperations {
         }
         @Override public int releaseInterface(long session, int value) {
             return TransportNativeBridge.releaseInterface(session, value);
+        }
+        @Override public long[] controlTransfer(long session, UsbControlRequest request,
+                byte[] buffer, int offset, int length, int timeoutMillis) {
+            return TransportNativeBridge.controlTransfer(session, request.getRequestType(),
+                    request.getRequest(), request.getValue(), request.getIndex(),
+                    buffer, offset, length, timeoutMillis);
         }
         @Override public int cancel(long session) { return TransportNativeBridge.cancel(session); }
         @Override public int close(long session) { return TransportNativeBridge.close(session); }

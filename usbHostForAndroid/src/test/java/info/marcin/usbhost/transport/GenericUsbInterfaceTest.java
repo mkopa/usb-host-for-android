@@ -91,6 +91,10 @@ public class GenericUsbInterfaceTest {
             ++releaseCount;
             return 0;
         }
+        @Override public long[] controlTransfer(long session, UsbControlRequest request,
+                byte[] buffer, int offset, int length, int timeoutMillis) {
+            throw new AssertionError("Unexpected control transfer");
+        }
         @Override public int cancel(long ignored) { return 0; }
         @Override public int close(long ignored) { return 0; }
         @Override public String lastError() { return "fake failure"; }

@@ -97,8 +97,30 @@ public final class GenericUsbDevice implements AutoCloseable {
     }
 
     public void cancelActiveTransfer() throws UsbTransportException {
-        requireWorkerThread(isMainThread());
+        cancelActiveTransferForTesting(isMainThread());
+    }
+
+    void cancelActiveTransferForTesting(boolean mainThread) throws UsbTransportException {
+        requireWorkerThread(mainThread);
         checkStatus(operations.cancel(requireOpenHandle()), operations);
+    }
+
+    public UsbTransferResult controlTransfer(UsbControlRequest request, byte[] buffer,
+            int offset, int length, int timeoutMillis) throws UsbTransportException {
+        return controlTransferForTesting(
+                request, buffer, offset, length, timeoutMillis, isMainThread());
+    }
+
+    UsbTransferResult controlTransferForTesting(UsbControlRequest request, byte[] buffer,
+            int offset, int length, int timeoutMillis, boolean mainThread)
+            throws UsbTransportException {
+        requireWorkerThread(mainThread);
+        if (request == null) throw failure(
+                UsbTransportStatus.INVALID_ARGUMENT, "request cannot be null");
+        validateTransferArguments(buffer, offset, length, timeoutMillis, 65_535);
+        long[] result = operations.controlTransfer(
+                requireOpenHandle(), request, buffer, offset, length, timeoutMillis);
+        return requireTransferResult(result, length, operations);
     }
 
     public GenericUsbInterface claimInterface(int interfaceNumber) throws UsbTransportException {
@@ -309,6 +331,31 @@ public final class GenericUsbDevice implements AutoCloseable {
         UsbTransportStatus status = UsbTransportStatus.fromCode(code);
         if (status != UsbTransportStatus.OK) throw new UsbTransportException(
                 status, operations.lastError());
+    }
+
+    static void validateTransferArguments(byte[] buffer, int offset, int length,
+            int timeoutMillis, int maximumLength) throws UsbTransportException {
+        if (buffer == null || offset < 0 || length < 0 || offset > buffer.length
+                || length > buffer.length - offset || length > maximumLength
+                || timeoutMillis < 1 || timeoutMillis > 60_000) {
+            throw failure(UsbTransportStatus.INVALID_ARGUMENT,
+                    "Invalid transfer buffer slice, length, or timeout");
+        }
+    }
+
+    static UsbTransferResult requireTransferResult(long[] record, int requestedLength,
+            TransportOperations operations) throws UsbTransportException {
+        if (record == null || record.length != TransportNativeBridge.TRANSFER_RECORD_LENGTH)
+            throw failure(UsbTransportStatus.INTERNAL_ERROR,
+                    "Native transport returned an invalid transfer record");
+        if (record[1] < 0 || record[1] > requestedLength || record[1] > Integer.MAX_VALUE)
+            throw failure(UsbTransportStatus.INTERNAL_ERROR,
+                    "Native transport returned an invalid actual byte count");
+        UsbTransportStatus status = UsbTransportStatus.fromCode((int) record[0]);
+        int actualLength = (int) record[1];
+        if (status != UsbTransportStatus.OK) throw new UsbTransportException(
+                status, actualLength, operations.lastError());
+        return new UsbTransferResult(status, actualLength);
     }
 
     private static void requireRecord(long[] record, int expected, TransportOperations operations)
