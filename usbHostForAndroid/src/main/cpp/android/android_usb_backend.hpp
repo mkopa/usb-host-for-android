@@ -31,6 +31,13 @@ struct AndroidUsbBackendHooks {
     transport::BackendStatus (*selectAlternateSetting)(
         void *, void *, std::uint8_t, std::uint8_t){nullptr};
     transport::BackendStatus (*releaseInterface)(void *, void *, std::uint8_t){nullptr};
+    transport::OperationId (*submitControlTransfer)(
+        void *, void *, const transport::ControlRequest &, transport::MutableBufferView,
+        transport::CompletionCallback){nullptr};
+    transport::OperationId (*submitEndpointTransfer)(
+        void *, void *, const transport::EndpointTransferRequest &,
+        transport::MutableBufferView, transport::CompletionCallback){nullptr};
+    bool (*cancelTransfer)(void *, transport::OperationId){nullptr};
 
     bool isValid() const noexcept;
 };

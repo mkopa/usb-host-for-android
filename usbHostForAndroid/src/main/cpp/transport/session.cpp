@@ -122,6 +122,7 @@ usbhost_status TransportSession::close() {
 
     if (backend) {
         const auto deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(1500);
+        bool cancellationRequested = false;
         if (active) {
             OperationId operation = kInvalidOperationId;
             {
@@ -131,7 +132,14 @@ usbhost_status TransportSession::close() {
                 });
                 operation = active->operation;
             }
-            if (operation != kInvalidOperationId) backend->cancel(operation);
+            if (operation != kInvalidOperationId) {
+                cancellationRequested = backend->cancel(operation);
+            }
+            if (cancellationRequested) {
+                std::unique_lock<std::mutex> lock(active->mutex);
+                active->completedCondition.wait_until(
+                    lock, deadline, [&active] { return active->completed; });
+            }
         }
         for (const std::uint8_t interfaceNumber : claimedInterfaces) {
             backend->releaseInterface(interfaceNumber);

@@ -183,6 +183,7 @@ int runStlinkUsbContractTest();
 int runScriptedUsbBackendTest();
 int runLibusbRuntimeContractTest();
 int runAndroidUsbBackendContractTest();
+int runAndroidUsbTransferContractTest();
 int runStatusContractTest();
 int runTransportErrorTest();
 int runTransportDescriptorTest();
@@ -213,6 +214,7 @@ int main() {
     CHECK(runScriptedUsbBackendTest() == 0);
     CHECK(runLibusbRuntimeContractTest() == 0);
     CHECK(runAndroidUsbBackendContractTest() == 0);
+    CHECK(runAndroidUsbTransferContractTest() == 0);
     CHECK(runStatusContractTest() == 0);
     CHECK(runTransportErrorTest() == 0);
     CHECK(runTransportDescriptorTest() == 0);

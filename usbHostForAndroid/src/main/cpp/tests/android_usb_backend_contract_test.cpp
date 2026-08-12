@@ -106,10 +106,29 @@ usbhost::transport::BackendStatus successfulAlternate(
     return usbhost::transport::BackendStatus::Success;
 }
 
+usbhost::transport::OperationId unsupportedControlTransfer(
+        void *, void *, const usbhost::transport::ControlRequest &,
+        usbhost::transport::MutableBufferView,
+        usbhost::transport::CompletionCallback completion) {
+    completion({usbhost::transport::BackendStatus::UnsupportedOperation, 0, {}});
+    return usbhost::transport::kInvalidOperationId;
+}
+
+usbhost::transport::OperationId unsupportedEndpointTransfer(
+        void *, void *, const usbhost::transport::EndpointTransferRequest &,
+        usbhost::transport::MutableBufferView,
+        usbhost::transport::CompletionCallback completion) {
+    completion({usbhost::transport::BackendStatus::UnsupportedOperation, 0, {}});
+    return usbhost::transport::kInvalidOperationId;
+}
+
+bool unsupportedCancel(void *, usbhost::transport::OperationId) { return false; }
+
 usbhost::android::AndroidUsbBackendHooks hooks(FakeAndroidUsb &fake) {
     return {&fake, duplicateFd, closeFd, acquireRuntime, wrapDevice, extractDescriptors,
             closeHandle, successfulOperation, successfulOperation,
-            successfulAlternate, successfulOperation};
+            successfulAlternate, successfulOperation, unsupportedControlTransfer,
+            unsupportedEndpointTransfer, unsupportedCancel};
 }
 
 void successfulOwnershipAndCleanupTest() {
