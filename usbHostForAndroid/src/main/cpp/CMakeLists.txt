@@ -80,7 +80,8 @@ if(ANDROID)
         "${USBHOST_STLINK_DIR}/src"
         "${USBHOST_STLINK_DIR}/src/stlink-lib"
         "${CMAKE_CURRENT_BINARY_DIR}/generated"
-        "${CMAKE_CURRENT_LIST_DIR}")
+        "${CMAKE_CURRENT_LIST_DIR}"
+        "${CMAKE_CURRENT_LIST_DIR}/include")
     target_compile_definitions(stlink_android PRIVATE
         STLINK_HAVE_UNISTD_H STLINK_HAVE_SYS_TIME_H STLINK_HAVE_SYS_MMAN_H)
     target_link_libraries(stlink_android PRIVATE usb-1.0 log)

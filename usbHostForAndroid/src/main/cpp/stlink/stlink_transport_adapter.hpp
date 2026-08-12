@@ -25,6 +25,10 @@ typedef struct usbhost_stlink_transport_adapter usbhost_stlink_transport_adapter
 usbhost_stlink_transport_adapter *usbhost_stlink_transport_adapter_create(
     const usbhost_stlink_transport_hooks *hooks,
     const usbhost_stlink_layout *layout);
+usbhost_stlink_transport_adapter *usbhost_stlink_transport_adapter_open(
+    const usbhost_stlink_transport_hooks *hooks,
+    const usbhost_stlink_layout *layout,
+    usbhost_status *out_status);
 usbhost_status usbhost_stlink_transport_adapter_claim(
     usbhost_stlink_transport_adapter *adapter);
 usbhost_status usbhost_stlink_transport_adapter_bulk(
