@@ -247,25 +247,24 @@ class RtlSdrController(
 
             val track = createAudioTrack()
             audioTrack = track
-            track.play()
             val description = RtlSdrNative.description(opened)
-            update("WBFM audio started: $description") {
-                it.copy(
-                    linkState = RtlSdrLinkState.PLAYING,
-                    status = "Playing 93.9 MHz · mono FM · 32 kHz audio",
-                )
-            }
-
-            val demodulator = WbfmDemodulator()
-            val iq = ByteArray(IQ_BUFFER_BYTES)
+            val pcm = ShortArray(PCM_BUFFER_SAMPLES)
+            var playbackStarted = false
             while (streamRequested) {
-                val count = RtlSdrNative.read(opened, iq)
+                val count = RtlSdrNative.readPcm(opened, pcm)
                 if (count < 0) throw IllegalStateException("RTL-SDR bulk stream stopped")
                 if (count == 0) continue
-                val pcm = demodulator.process(iq, count)
-                if (pcm.isNotEmpty()) {
-                    val written = track.write(pcm, 0, pcm.size, AudioTrack.WRITE_BLOCKING)
-                    if (written < 0) throw IllegalStateException("AudioTrack write failed: $written")
+                val written = track.write(pcm, 0, count, AudioTrack.WRITE_BLOCKING)
+                if (written < 0) throw IllegalStateException("AudioTrack write failed: $written")
+                if (!playbackStarted) {
+                    track.play()
+                    playbackStarted = true
+                    update("Native rtl_fm WBFM audio started: $description") {
+                        it.copy(
+                            linkState = RtlSdrLinkState.PLAYING,
+                            status = "Playing 93.9 MHz · native rtl_fm WBFM · 32 kHz mono",
+                        )
+                    }
                 }
             }
             finishRadio("Radio stopped and USB session closed.")
@@ -306,7 +305,7 @@ class RtlSdrController(
             .setTransferMode(AudioTrack.MODE_STREAM)
             .setBufferSizeInBytes(maxOf(minimum * 4, AUDIO_BUFFER_BYTES))
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            builder.setPerformanceMode(AudioTrack.PERFORMANCE_MODE_LOW_LATENCY)
+            builder.setPerformanceMode(AudioTrack.PERFORMANCE_MODE_POWER_SAVING)
         }
         return builder.build().also {
             check(it.state == AudioTrack.STATE_INITIALIZED) { "AudioTrack initialization failed" }
@@ -382,7 +381,7 @@ class RtlSdrController(
         const val ACTION_USB_PERMISSION =
             "info.marcin.usbhost.example.rtlsdr.action.USB_PERMISSION"
         private const val MAX_LOG_ENTRIES = 16
-        private const val IQ_BUFFER_BYTES = 16 * 16_384
+        private const val PCM_BUFFER_SAMPLES = 16 * 1024
         private const val AUDIO_BUFFER_BYTES = 64 * 1024
 
         private val models = mapOf(

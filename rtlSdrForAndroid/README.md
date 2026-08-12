@@ -10,8 +10,9 @@ RTL-SDR connection through `info.marcin.usbhost.transport`:
 5. release the interface and close both session owners on disconnect.
 
 The connection probe itself performs no device mutation. Its optional FM player then uses the
-official rtl-sdr R82xx tuner driver and the `rtl_fm` WBFM profile to configure volatile registers,
-tune 93.9 MHz, stream IQ over endpoint `0x81`, demodulate mono FM, and feed Android `AudioTrack`.
+official rtl-sdr R82xx tuner driver and a native port of the `rtl_fm -M wbfm` pipeline to configure
+volatile registers, tune 93.9 MHz, stream IQ over endpoint `0x81`, produce 32 kHz mono PCM, and
+feed Android `AudioTrack`. Kotlin does not process I/Q samples.
 It does not write EEPROM. The initial USB IDs are `0BDA:2832` and `0BDA:2838`.
 
 The Android library remains MIT-licensed. Because the FM example compiles the GPL-2.0-or-later
@@ -23,3 +24,9 @@ Build the APK locally with:
 ```powershell
 ./gradlew.bat :rtlSdrForAndroid:assembleDebug
 ```
+
+## Hardware validation
+
+Validated on 2026-08-12 with a Samsung Galaxy A54 running Android 16 and a generic
+`0BDA:2838` RTL2832U dongle with an R820T/R820T2 tuner. The 93.9 MHz WBFM stream produced clear,
+continuous audio through Android `AudioTrack`; no EEPROM write was performed.

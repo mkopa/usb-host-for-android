@@ -11,7 +11,7 @@ object RtlSdrNative {
         return handle
     }
 
-    fun read(handle: Long, destination: ByteArray): Int = nativeRead(handle, destination)
+    fun readPcm(handle: Long, destination: ShortArray): Int = nativeReadPcm(handle, destination)
 
     fun description(handle: Long): String = nativeDescription(handle)
 
@@ -24,7 +24,7 @@ object RtlSdrNative {
         frequencyHz: Long,
         sampleRate: Int,
     ): Long
-    private external fun nativeRead(handle: Long, destination: ByteArray): Int
+    private external fun nativeReadPcm(handle: Long, destination: ShortArray): Int
     private external fun nativeDescription(handle: Long): String
     private external fun nativeClose(handle: Long)
 }

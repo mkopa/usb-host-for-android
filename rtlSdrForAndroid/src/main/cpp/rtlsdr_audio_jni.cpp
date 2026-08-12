@@ -37,6 +37,11 @@ constexpr uint16_t kUsbEndpointMaximumPacket = 0x2158;
 constexpr uint16_t kDemodControl = 0x3000;
 constexpr uint16_t kDemodControl1 = 0x300b;
 constexpr uint8_t kBulkEndpointIn = 0x81;
+constexpr uint32_t kIqBufferBytes = 16 * 16'384;
+constexpr int kInputDownsample = 6;
+constexpr int kIfRate = 170'000;
+constexpr int kAudioRate = 32'000;
+constexpr int kDeemphasisA = 13;
 
 constexpr int kFir[16] = {
     -54, -36, -41, -40, -32, -14, 14, 53,
@@ -52,6 +57,17 @@ struct RtlDevice {
     bool interface_claimed = false;
     bool tuner_initialized = false;
     const char *tuner_name = "unknown";
+    uint8_t iq_buffer[kIqBufferBytes]{};
+    int rotation_phase = 0;
+    int iq_count = 0;
+    int i_accumulator = 0;
+    int q_accumulator = 0;
+    int previous_i = 0;
+    int previous_q = 0;
+    bool have_previous_iq = false;
+    int deemphasis_average = 0;
+    int resample_phase = 0;
+    int resample_accumulator = 0;
 };
 
 struct UsbApi {
@@ -279,7 +295,11 @@ bool initialize_tuner(RtlDevice *device) {
         return false;
     }
 
-    const int result = r82xx_init(&device->tuner);
+    int result = r82xx_init(&device->tuner);
+    if (result >= 0) {
+        // Same automatic tuner gain selected by rtl_fm when no -g option is supplied.
+        result = r82xx_set_gain(&device->tuner, 0, 0);
+    }
     device->tuner_initialized = result >= 0;
     set_i2c_repeater(device, false);
     return result >= 0;
@@ -292,6 +312,85 @@ bool tune(RtlDevice *device, uint32_t frequency) {
     if (result < 0) return false;
     device->frequency = frequency;
     return true;
+}
+
+int rtl_fm_fast_atan2(int y, int x) {
+    // Copied from rtl_fm.c: pi is represented by 1 << 14.
+    if (x == 0 && y == 0) return 0;
+    const int y_abs = y < 0 ? -y : y;
+    const int pi_fourth = 1 << 12;
+    const int three_pi_fourths = 3 * pi_fourth;
+    int angle;
+    if (x >= 0) {
+        angle = pi_fourth - pi_fourth * (x - y_abs) / (x + y_abs);
+    } else {
+        angle = three_pi_fourths - pi_fourth * (x + y_abs) / (y_abs - x);
+    }
+    return y < 0 ? -angle : angle;
+}
+
+int process_rtl_fm_wbfm(RtlDevice *device, const uint8_t *input, uint32_t length,
+                        int16_t *output, int output_capacity) {
+    int output_length = 0;
+    for (uint32_t index = 0; index + 1 < length; index += 2) {
+        const int raw_i = input[index];
+        const int raw_q = input[index + 1];
+        int i;
+        int q;
+
+        // rtl_fm rotate_90(), expressed one I/Q pair at a time so state survives USB chunks.
+        switch (device->rotation_phase) {
+            case 1: i = 128 - raw_q; q = raw_i - 127; break;
+            case 2: i = 128 - raw_i; q = 128 - raw_q; break;
+            case 3: i = raw_q - 127; q = 128 - raw_i; break;
+            default: i = raw_i - 127; q = raw_q - 127; break;
+        }
+        device->rotation_phase = (device->rotation_phase + 1) & 3;
+
+        // rtl_fm low_pass(): square-window FIR and 6:1 IQ downsampling.
+        device->i_accumulator += i;
+        device->q_accumulator += q;
+        if (++device->iq_count < kInputDownsample) continue;
+        const int filtered_i = device->i_accumulator;
+        const int filtered_q = device->q_accumulator;
+        device->iq_count = 0;
+        device->i_accumulator = 0;
+        device->q_accumulator = 0;
+
+        if (device->have_previous_iq) {
+            // rtl_fm polar_disc_fast(): conjugate product followed by fixed-point atan2.
+            const int real = filtered_i * device->previous_i +
+                filtered_q * device->previous_q;
+            const int imaginary = filtered_q * device->previous_i -
+                filtered_i * device->previous_q;
+            const int discriminator = rtl_fm_fast_atan2(imaginary, real);
+
+            // rtl_fm deemph_filter(), using the WBFM 75 us coefficient at 170 kHz.
+            const int difference = discriminator - device->deemphasis_average;
+            if (difference > 0) {
+                device->deemphasis_average +=
+                    (difference + kDeemphasisA / 2) / kDeemphasisA;
+            } else {
+                device->deemphasis_average +=
+                    (difference - kDeemphasisA / 2) / kDeemphasisA;
+            }
+
+            // rtl_fm low_pass_real(): 170 kHz discriminator output to 32 kHz PCM.
+            device->resample_accumulator += device->deemphasis_average;
+            device->resample_phase += kAudioRate;
+            if (device->resample_phase >= kIfRate) {
+                if (output_length >= output_capacity) break;
+                output[output_length++] = static_cast<int16_t>(
+                    device->resample_accumulator / (kIfRate / kAudioRate));
+                device->resample_phase -= kIfRate;
+                device->resample_accumulator = 0;
+            }
+        }
+        device->previous_i = filtered_i;
+        device->previous_q = filtered_q;
+        device->have_previous_iq = true;
+    }
+    return output_length;
 }
 
 bool reset_endpoint(RtlDevice *device) {
@@ -416,25 +515,27 @@ Java_info_marcin_usbhost_example_rtlsdr_RtlSdrNative_nativeOpen(
 }
 
 extern "C" JNIEXPORT jint JNICALL
-Java_info_marcin_usbhost_example_rtlsdr_RtlSdrNative_nativeRead(
-    JNIEnv *env, jobject, jlong handle, jbyteArray destination) {
+Java_info_marcin_usbhost_example_rtlsdr_RtlSdrNative_nativeReadPcm(
+    JNIEnv *env, jobject, jlong handle, jshortArray destination) {
     auto *device = reinterpret_cast<RtlDevice *>(handle);
     if (device == nullptr || destination == nullptr) return -1;
-    const jsize length = env->GetArrayLength(destination);
-    jbyte *bytes = env->GetByteArrayElements(destination, nullptr);
-    if (bytes == nullptr) return -1;
     uint32_t actual = 0;
     const usbhost_status status = g_usb.bulk_transfer(
-        device->session, kBulkEndpointIn, reinterpret_cast<uint8_t *>(bytes),
-        static_cast<uint32_t>(length), kBulkTimeoutMs, &actual);
-    env->ReleaseByteArrayElements(destination, bytes, 0);
+        device->session, kBulkEndpointIn, device->iq_buffer,
+        kIqBufferBytes, kBulkTimeoutMs, &actual);
     if (status == USBHOST_TIMEOUT) return 0;
     if (status != USBHOST_OK) {
         __android_log_print(ANDROID_LOG_ERROR, kLogTag, "bulk read failed: %s",
                             g_usb.status_name(status));
         return -1;
     }
-    return static_cast<jint>(actual);
+    const jsize output_capacity = env->GetArrayLength(destination);
+    jshort *pcm = env->GetShortArrayElements(destination, nullptr);
+    if (pcm == nullptr) return -1;
+    const int output_length = process_rtl_fm_wbfm(
+        device, device->iq_buffer, actual, reinterpret_cast<int16_t *>(pcm), output_capacity);
+    env->ReleaseShortArrayElements(destination, pcm, 0);
+    return output_length;
 }
 
 extern "C" JNIEXPORT jstring JNICALL
