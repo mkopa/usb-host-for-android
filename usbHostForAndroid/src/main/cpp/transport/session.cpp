@@ -429,6 +429,72 @@ TransferResult TransportSession::controlTransfer(
     return {result.status, result.actualLength, std::move(result.diagnostic)};
 }
 
+TransferResult TransportSession::endpointTransfer(
+        const InterfaceClaimToken &token, const EndpointDescriptor &endpoint,
+        const EndpointTransferRequest &request, MutableBufferView buffer) {
+    if (!buffer.isValid()) return {USBHOST_INVALID_ARGUMENT, 0, "invalid transfer buffer"};
+    const TransportError ownership = validateEndpoint(token, endpoint);
+    if (ownership.status != USBHOST_OK) {
+        return {ownership.status, ownership.actualLength, ownership.diagnostic};
+    }
+    const TransportError validation = validateEndpointTransfer(
+        request, buffer.capacity, endpoint);
+    if (validation.status != USBHOST_OK) {
+        return {validation.status, validation.actualLength, validation.diagnostic};
+    }
+    std::shared_ptr<ActiveTransfer> active;
+    UsbBackend *backend = nullptr;
+    {
+        std::lock_guard<std::mutex> lock(mutex_);
+        if (state_ != SessionState::Open || !backend_) {
+            return {USBHOST_INVALID_STATE, 0, "session is not open"};
+        }
+        if (activeTransfer_) return {USBHOST_BUSY, 0, "another transfer is active"};
+        try { active = std::make_shared<ActiveTransfer>(); }
+        catch (...) { return {USBHOST_INTERNAL_ERROR, 0, "transfer state allocation failed"}; }
+        activeTransfer_ = active;
+        backend = backend_.get();
+    }
+
+    std::uint8_t *sliceData = request.buffer.length == 0
+        ? nullptr : buffer.data + request.buffer.offset;
+    const MutableBufferView slice{sliceData, request.buffer.length};
+    const OperationId operation = backend->submitEndpoint(
+        request, slice, [active](BackendCompletion completion) {
+            std::lock_guard<std::mutex> lock(active->mutex);
+            if (active->completed) return;
+            active->completion = std::move(completion);
+            active->completed = true;
+            active->completedCondition.notify_all();
+        });
+    {
+        std::lock_guard<std::mutex> lock(active->mutex);
+        active->operation = operation;
+        if (operation == kInvalidOperationId && !active->completed) {
+            active->completion = {BackendStatus::InternalFailure, 0,
+                                  "backend rejected transfer without completion"};
+            active->completed = true;
+            active->completedCondition.notify_all();
+        }
+    }
+    BackendCompletion completion;
+    {
+        std::unique_lock<std::mutex> lock(active->mutex);
+        active->completedCondition.wait(lock, [&active] { return active->completed; });
+        completion = std::move(active->completion);
+    }
+    {
+        std::lock_guard<std::mutex> lock(mutex_);
+        if (activeTransfer_ == active) activeTransfer_.reset();
+    }
+    if (completion.actualLength > request.buffer.length) {
+        return {USBHOST_INTERNAL_ERROR, 0, "backend reported an oversized completion"};
+    }
+    const TransportError result = makeTransportError(
+        completion.status, completion.diagnostic, completion.actualLength);
+    return {result.status, result.actualLength, std::move(result.diagnostic)};
+}
+
 SessionState TransportSession::state() const {
     std::lock_guard<std::mutex> lock(mutex_);
     return state_;

@@ -55,6 +55,10 @@ public:
                                     const EndpointDescriptor &endpoint) const;
     TransferResult controlTransfer(const ControlRequest &request,
                                    MutableBufferView buffer);
+    TransferResult endpointTransfer(const InterfaceClaimToken &token,
+                                    const EndpointDescriptor &endpoint,
+                                    const EndpointTransferRequest &request,
+                                    MutableBufferView buffer);
     SessionState state() const;
     DeviceDescriptor descriptorSnapshot() const;
 

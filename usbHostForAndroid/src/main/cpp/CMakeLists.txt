@@ -120,6 +120,7 @@ if(USBHOST_BUILD_TESTS)
         tests/transport_configuration_test.cpp
         tests/transport_control_transfer_test.cpp
         tests/transport_descriptor_test.cpp
+        tests/transport_endpoint_transfer_test.cpp
         tests/transport_interface_test.cpp
         tests/transport_jni_contract_test.cpp
         tests/transport_c_api_session_test.c
