@@ -22,6 +22,7 @@ add_library(usbhost_core STATIC
     transport/error.cpp
     transport/registry.cpp
     transport/session.cpp
+    transport/transfer_validation.cpp
     transport/c_api.cpp
     stlink/stlink_usb_layout.c)
 target_include_directories(usbhost_core PUBLIC
@@ -125,6 +126,7 @@ if(USBHOST_BUILD_TESTS)
         tests/transport_session_lifecycle_test.cpp
         tests/transport_error_test.cpp
         tests/transport_types_test.cpp
+        tests/transport_validation_test.cpp
         tests/c_api_contract_test.c
         tests/cxx_api_contract_test.cpp)
     target_link_libraries(usbhost_tests PRIVATE usbhost_core Threads::Threads)
