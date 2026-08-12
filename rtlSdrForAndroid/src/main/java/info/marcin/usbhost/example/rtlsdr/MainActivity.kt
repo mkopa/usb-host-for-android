@@ -44,6 +44,8 @@ class MainActivity : ComponentActivity() {
                     onSelect = controller::select,
                     onConnect = controller::requestPermissionOrConnect,
                     onDisconnect = { controller.disconnect() },
+                    onPlay = controller::play93_9Mhz,
+                    onStop = { controller.stopRadio() },
                 )
             }
         }

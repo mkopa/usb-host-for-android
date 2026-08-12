@@ -22,6 +22,8 @@ enum class RtlSdrLinkState {
     REQUESTING_PERMISSION,
     CONNECTING,
     CONNECTED,
+    TUNING,
+    PLAYING,
     DISCONNECTING,
     ERROR,
 }
@@ -37,8 +39,14 @@ data class RtlSdrUiState(
     val busy: Boolean
         get() = linkState == RtlSdrLinkState.REQUESTING_PERMISSION ||
             linkState == RtlSdrLinkState.CONNECTING ||
+            linkState == RtlSdrLinkState.TUNING ||
             linkState == RtlSdrLinkState.DISCONNECTING
 
     val connected: Boolean
-        get() = linkState == RtlSdrLinkState.CONNECTED
+        get() = linkState == RtlSdrLinkState.CONNECTED ||
+            linkState == RtlSdrLinkState.TUNING ||
+            linkState == RtlSdrLinkState.PLAYING
+
+    val playing: Boolean
+        get() = linkState == RtlSdrLinkState.PLAYING
 }

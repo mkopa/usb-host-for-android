@@ -6,6 +6,9 @@ import android.content.Intent
 import android.hardware.usb.UsbDevice
 import android.hardware.usb.UsbDeviceConnection
 import android.hardware.usb.UsbManager
+import android.media.AudioAttributes
+import android.media.AudioFormat
+import android.media.AudioTrack
 import android.os.Build
 import info.marcin.usbhost.transport.GenericUsbDevice
 import info.marcin.usbhost.transport.GenericUsbInterface
@@ -28,6 +31,9 @@ class RtlSdrController(
     private var androidConnection: UsbDeviceConnection? = null
     private var transportDevice: GenericUsbDevice? = null
     private var claimedInterface: GenericUsbInterface? = null
+    private var nativeSession = 0L
+    private var audioTrack: AudioTrack? = null
+    @Volatile private var streamRequested = false
     @Volatile private var activeDeviceId: Int? = null
 
     fun scan() {
@@ -97,6 +103,11 @@ class RtlSdrController(
 
     fun disconnect(reason: String = "Disconnected safely.") {
         val snapshot = currentState()
+        if (snapshot.linkState == RtlSdrLinkState.PLAYING ||
+            snapshot.linkState == RtlSdrLinkState.TUNING) {
+            stopRadio(reason)
+            return
+        }
         if (snapshot.busy || (!snapshot.connected && transportDevice == null)) return
         update("Closing interface and USB session") {
             it.copy(linkState = RtlSdrLinkState.DISCONNECTING, status = "Releasing interface 0…")
@@ -111,6 +122,7 @@ class RtlSdrController(
 
     fun onDetached(device: UsbDevice?) {
         if (device != null && device.deviceId == activeDeviceId) {
+            streamRequested = false
             worker.execute {
                 closeCurrent()
                 update("Dongle detached; session closed") {
@@ -124,6 +136,28 @@ class RtlSdrController(
             }
         } else {
             scan()
+        }
+    }
+
+    fun play93_9Mhz() {
+        val snapshot = currentState()
+        if (snapshot.linkState != RtlSdrLinkState.CONNECTED || streamRequested) return
+        val connection = androidConnection ?: return
+        streamRequested = true
+        update("Preparing rtl_fm WBFM profile for 93.9 MHz") {
+            it.copy(
+                linkState = RtlSdrLinkState.TUNING,
+                status = "Initializing RTL2832U and tuner for 93.9 MHz…",
+            )
+        }
+        worker.execute { streamRadio(connection) }
+    }
+
+    fun stopRadio(reason: String = "Radio stopped and USB session closed.") {
+        if (!streamRequested && currentState().linkState != RtlSdrLinkState.TUNING) return
+        streamRequested = false
+        update("Stopping FM audio") {
+            it.copy(linkState = RtlSdrLinkState.DISCONNECTING, status = reason)
         }
     }
 
@@ -197,16 +231,129 @@ class RtlSdrController(
         }
     }
 
-    private fun closeCurrent() {
-        val interfaceToClose = claimedInterface
-        val deviceToClose = transportDevice
-        val connectionToClose = androidConnection
-        claimedInterface = null
-        transportDevice = null
+    private fun streamRadio(connection: UsbDeviceConnection) {
+        try {
+            releaseGenericSession()
+            val opened = RtlSdrNative.open(
+                connection.fileDescriptor,
+                WbfmDemodulator.CAPTURE_FREQUENCY_HZ,
+                WbfmDemodulator.CAPTURE_RATE,
+            )
+            nativeSession = opened
+            if (!streamRequested) {
+                finishRadio("Radio start cancelled.")
+                return
+            }
+
+            val track = createAudioTrack()
+            audioTrack = track
+            track.play()
+            val description = RtlSdrNative.description(opened)
+            update("WBFM audio started: $description") {
+                it.copy(
+                    linkState = RtlSdrLinkState.PLAYING,
+                    status = "Playing 93.9 MHz · mono FM · 32 kHz audio",
+                )
+            }
+
+            val demodulator = WbfmDemodulator()
+            val iq = ByteArray(IQ_BUFFER_BYTES)
+            while (streamRequested) {
+                val count = RtlSdrNative.read(opened, iq)
+                if (count < 0) throw IllegalStateException("RTL-SDR bulk stream stopped")
+                if (count == 0) continue
+                val pcm = demodulator.process(iq, count)
+                if (pcm.isNotEmpty()) {
+                    val written = track.write(pcm, 0, pcm.size, AudioTrack.WRITE_BLOCKING)
+                    if (written < 0) throw IllegalStateException("AudioTrack write failed: $written")
+                }
+            }
+            finishRadio("Radio stopped and USB session closed.")
+        } catch (error: Throwable) {
+            val detail = error.message ?: error.javaClass.simpleName
+            closeCurrent()
+            update("FM audio failed: $detail") {
+                it.copy(
+                    linkState = RtlSdrLinkState.ERROR,
+                    status = "FM audio failed — $detail",
+                    connection = null,
+                )
+            }
+        }
+    }
+
+    private fun createAudioTrack(): AudioTrack {
+        val minimum = AudioTrack.getMinBufferSize(
+            WbfmDemodulator.AUDIO_RATE,
+            AudioFormat.CHANNEL_OUT_MONO,
+            AudioFormat.ENCODING_PCM_16BIT,
+        )
+        check(minimum > 0) { "AudioTrack does not support 32 kHz mono PCM" }
+        val builder = AudioTrack.Builder()
+            .setAudioAttributes(
+                AudioAttributes.Builder()
+                    .setUsage(AudioAttributes.USAGE_MEDIA)
+                    .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
+                    .build(),
+            )
+            .setAudioFormat(
+                AudioFormat.Builder()
+                    .setEncoding(AudioFormat.ENCODING_PCM_16BIT)
+                    .setSampleRate(WbfmDemodulator.AUDIO_RATE)
+                    .setChannelMask(AudioFormat.CHANNEL_OUT_MONO)
+                    .build(),
+            )
+            .setTransferMode(AudioTrack.MODE_STREAM)
+            .setBufferSizeInBytes(maxOf(minimum * 4, AUDIO_BUFFER_BYTES))
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            builder.setPerformanceMode(AudioTrack.PERFORMANCE_MODE_LOW_LATENCY)
+        }
+        return builder.build().also {
+            check(it.state == AudioTrack.STATE_INITIALIZED) { "AudioTrack initialization failed" }
+            it.setVolume(1.0f)
+        }
+    }
+
+    private fun finishRadio(message: String) {
+        closeRadioResources()
+        androidConnection?.close()
         androidConnection = null
         activeDeviceId = null
+        update(message) {
+            it.copy(linkState = RtlSdrLinkState.IDLE, status = message, connection = null)
+        }
+        scan()
+    }
+
+    private fun releaseGenericSession() {
+        val interfaceToClose = claimedInterface
+        val deviceToClose = transportDevice
+        claimedInterface = null
+        transportDevice = null
         runCatching { interfaceToClose?.close() }
         runCatching { deviceToClose?.close() }
+    }
+
+    private fun closeRadioResources() {
+        streamRequested = false
+        val track = audioTrack
+        audioTrack = null
+        runCatching { track?.pause() }
+        runCatching { track?.flush() }
+        runCatching { track?.stop() }
+        track?.release()
+        val handle = nativeSession
+        nativeSession = 0L
+        runCatching { RtlSdrNative.close(handle) }
+    }
+
+    private fun closeCurrent() {
+        streamRequested = false
+        val connectionToClose = androidConnection
+        androidConnection = null
+        activeDeviceId = null
+        releaseGenericSession()
+        closeRadioResources()
         connectionToClose?.close()
     }
 
@@ -235,6 +382,8 @@ class RtlSdrController(
         const val ACTION_USB_PERMISSION =
             "info.marcin.usbhost.example.rtlsdr.action.USB_PERMISSION"
         private const val MAX_LOG_ENTRIES = 16
+        private const val IQ_BUFFER_BYTES = 16 * 16_384
+        private const val AUDIO_BUFFER_BYTES = 64 * 1024
 
         private val models = mapOf(
             (0x0bda shl 16 or 0x2832) to "Generic RTL2832U",

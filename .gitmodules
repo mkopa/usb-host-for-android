@@ -4,3 +4,6 @@
 [submodule "third_party/stlink"]
 	path = third_party/stlink
 	url = https://github.com/stlink-org/stlink.git
+[submodule "rtlSdrForAndroid/src/main/cpp/third_party/rtl-sdr"]
+	path = rtlSdrForAndroid/src/main/cpp/third_party/rtl-sdr
+	url = https://gitea.osmocom.org/sdr/rtl-sdr.git

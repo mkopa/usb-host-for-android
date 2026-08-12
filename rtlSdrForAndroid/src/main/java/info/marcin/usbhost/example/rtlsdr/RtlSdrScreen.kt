@@ -41,6 +41,8 @@ fun RtlSdrScreen(
     onSelect: (RtlSdrCandidate) -> Unit,
     onConnect: () -> Unit,
     onDisconnect: () -> Unit,
+    onPlay: () -> Unit,
+    onStop: () -> Unit,
 ) {
     Scaffold(
         topBar = {
@@ -49,7 +51,7 @@ fun RtlSdrScreen(
                     Column {
                         Text("RtlSdrForAndroid", fontWeight = FontWeight.Bold)
                         Text(
-                            "USB LINK PROBE · OPEN + CLAIM ONLY",
+                            "USB HOST · RTL_FM WBFM AUDIO",
                             color = MaterialTheme.colorScheme.primary,
                             style = MaterialTheme.typography.labelSmall,
                         )
@@ -125,6 +127,32 @@ fun RtlSdrScreen(
                     SectionTitle("USB SESSION", "interface 0 claimed")
                     ConnectionCard(connection)
                 }
+                item {
+                    SectionTitle("FM RADIO", "rtl_fm WBFM profile")
+                    Card(
+                        Modifier.fillMaxWidth(),
+                        colors = CardDefaults.cardColors(
+                            containerColor = Color(0xFF13A879).copy(alpha = 0.12f),
+                        ),
+                        shape = RoundedCornerShape(18.dp),
+                    ) {
+                        Column(
+                            Modifier.padding(16.dp),
+                            verticalArrangement = Arrangement.spacedBy(10.dp),
+                        ) {
+                            Text("93.9 MHz", style = MaterialTheme.typography.headlineMedium,
+                                fontWeight = FontWeight.Bold)
+                            Text("Wide FM · 170 kHz discriminator · 32 kHz mono audio")
+                            if (state.playing) {
+                                Button(onClick = onStop) { Text("Stop audio") }
+                            } else {
+                                Button(onClick = onPlay, enabled = !state.busy) {
+                                    Text(if (state.linkState == RtlSdrLinkState.TUNING) "Tuning…" else "Play 93.9 MHz")
+                                }
+                            }
+                        }
+                    }
+                }
             }
             item {
                 SectionTitle("SAFETY SCOPE", "connection prototype")
@@ -135,8 +163,8 @@ fun RtlSdrScreen(
                     ),
                 ) {
                     Text(
-                        "No vendor control writes, baseband/tuner initialization, EEPROM access, " +
-                            "USB reset, or IQ streaming are performed.",
+                        "The connection probe is inspection-only. Starting FM writes volatile " +
+                            "RTL2832U/R82xx registers and streams IQ; EEPROM is left unchanged.",
                         Modifier.padding(14.dp),
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
@@ -166,9 +194,10 @@ fun RtlSdrScreen(
 @Composable
 private fun StatusCard(state: RtlSdrUiState) {
     val accent = when (state.linkState) {
-        RtlSdrLinkState.CONNECTED -> Color(0xFF13A879)
+        RtlSdrLinkState.CONNECTED, RtlSdrLinkState.PLAYING -> Color(0xFF13A879)
         RtlSdrLinkState.ERROR -> MaterialTheme.colorScheme.error
         RtlSdrLinkState.CONNECTING,
+        RtlSdrLinkState.TUNING,
         RtlSdrLinkState.REQUESTING_PERMISSION,
         RtlSdrLinkState.DISCONNECTING -> Color(0xFFE09A25)
         else -> MaterialTheme.colorScheme.primary

@@ -19,5 +19,17 @@ The complete license text is available in `third_party/libusb/COPYING`.
 
 The complete license text is available in `third_party/stlink/LICENSE.md`.
 
+## rtl-sdr
+
+- Source: https://gitea.osmocom.org/sdr/rtl-sdr
+- Revision: `v2.0.3` (`797f8143266d983c56d8f35d2d442527529dd8a5`)
+- License: GNU General Public License v2.0 or later
+- Integration: the `RtlSdrForAndroid` example compiles the R82xx tuner implementation into its
+  native example library; it is not linked into or packaged with the publishable Android AAR
+
+The complete license text is available in
+`rtlSdrForAndroid/src/main/cpp/third_party/rtl-sdr/COPYING`.
+
 These dependencies are pinned as Git submodules. Update a revision only with an Android build,
-license review, native contract tests, and physical-hardware revalidation.
+license review and relevant hardware revalidation. Changes affecting the publishable transport
+library additionally require its native contract tests.

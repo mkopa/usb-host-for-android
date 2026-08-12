@@ -209,6 +209,7 @@ main commit starts signed Maven Central publication. See [RELEASING.md](RELEASIN
 |---|---|
 | `usbHostForAndroid/` | Publishable Android AAR, Prefab headers, native core and adapters |
 | `usbHostExample/` | Minimal permission and integration example |
+| `rtlSdrForAndroid/` | RTL-SDR connection and WBFM audio example |
 | `smoke-tests/android-consumer/` | Detached Maven consumer compile contract |
 | `native-tests/` | Host-native contracts using fake transports |
 | `docker/android-runner/` | Pinned JDK/Android/NDK/CMake build image |
@@ -218,6 +219,7 @@ main commit starts signed Maven Central publication. See [RELEASING.md](RELEASIN
 
 ## Dependencies and license
 
-The project is MIT licensed. libusb is LGPL-2.1-or-later and remains a replaceable shared library;
-stlink is BSD-3-Clause. Exact revisions, provenance, and packaging details are documented in
-[THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+The publishable Android library is MIT licensed. libusb is LGPL-2.1-or-later and remains a
+replaceable shared library; stlink is BSD-3-Clause. The separate RTL-SDR FM example incorporates
+GPL-2.0-or-later tuner code and is distributed under that license. Exact revisions, provenance,
+and packaging details are documented in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
