@@ -194,6 +194,7 @@ int runTransportAdditionalDescriptorTest();
 int runTransportRegistryTest();
 int runTransportSessionLifecycleTest();
 int runTransportTypesTest();
+int runTransportValidationTest();
 
 int main() {
     lifecycleTest();
@@ -218,6 +219,7 @@ int main() {
     CHECK(runTransportRegistryTest() == 0);
     CHECK(runTransportSessionLifecycleTest() == 0);
     CHECK(runTransportTypesTest() == 0);
+    CHECK(runTransportValidationTest() == 0);
     CHECK(usbhost_close(0xdeadbeefULL) == USBHOST_OK);
     if (failures != 0) {
         std::cerr << failures << " native test(s) failed\n";
