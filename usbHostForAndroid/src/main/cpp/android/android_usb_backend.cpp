@@ -1,7 +1,10 @@
 #include "android/android_usb_backend.hpp"
 
+#include <algorithm>
 #include <cstdint>
 #include <new>
+#include <mutex>
+#include <unordered_set>
 #include <utility>
 #include <vector>
 
@@ -190,6 +193,147 @@ BackendStatus productionReleaseInterface(void *, void *handle, std::uint8_t numb
     return mapLibusb(libusb_release_interface(
         static_cast<libusb_device_handle *>(handle), number));
 }
+
+struct ProductionTransfer {
+    libusb_transfer *transfer{nullptr};
+    transport::CompletionCallback completion;
+    transport::MutableBufferView callerBuffer;
+    transport::Direction direction{transport::Direction::Out};
+    std::vector<std::uint8_t> controlBuffer;
+    bool control{false};
+};
+
+std::mutex productionTransfersMutex;
+std::unordered_set<libusb_transfer *> productionTransfers;
+
+BackendStatus mapTransferStatus(libusb_transfer_status status) noexcept {
+    switch (status) {
+        case LIBUSB_TRANSFER_COMPLETED: return BackendStatus::Success;
+        case LIBUSB_TRANSFER_TIMED_OUT: return BackendStatus::Timeout;
+        case LIBUSB_TRANSFER_CANCELLED: return BackendStatus::Cancelled;
+        case LIBUSB_TRANSFER_STALL: return BackendStatus::Stall;
+        case LIBUSB_TRANSFER_NO_DEVICE: return BackendStatus::Disconnected;
+        case LIBUSB_TRANSFER_ERROR:
+        case LIBUSB_TRANSFER_OVERFLOW: return BackendStatus::UsbFailure;
+    }
+    return BackendStatus::UsbFailure;
+}
+
+void LIBUSB_CALL productionTransferCompleted(libusb_transfer *transfer) {
+    auto *state = static_cast<ProductionTransfer *>(transfer->user_data);
+    {
+        std::lock_guard<std::mutex> lock(productionTransfersMutex);
+        productionTransfers.erase(transfer);
+    }
+    const BackendStatus status = mapTransferStatus(transfer->status);
+    std::uint32_t actual = transfer->actual_length < 0
+        ? 0u : static_cast<std::uint32_t>(transfer->actual_length);
+    if (state->control && state->direction == transport::Direction::In && actual != 0) {
+        actual = std::min(actual, state->callerBuffer.capacity);
+        std::copy_n(libusb_control_transfer_get_data(transfer), actual,
+                    state->callerBuffer.data);
+    }
+    auto completion = std::move(state->completion);
+    libusb_free_transfer(transfer);
+    delete state;
+    completion({status, actual, status == BackendStatus::Success ? "" : "libusb transfer failed"});
+}
+
+transport::OperationId submitProductionTransfer(ProductionTransfer *state) {
+    {
+        std::lock_guard<std::mutex> lock(productionTransfersMutex);
+        productionTransfers.insert(state->transfer);
+    }
+    const int result = libusb_submit_transfer(state->transfer);
+    if (result == LIBUSB_SUCCESS) {
+        return static_cast<transport::OperationId>(
+            reinterpret_cast<std::uintptr_t>(state->transfer));
+    }
+    {
+        std::lock_guard<std::mutex> lock(productionTransfersMutex);
+        productionTransfers.erase(state->transfer);
+    }
+    auto completion = std::move(state->completion);
+    libusb_free_transfer(state->transfer);
+    delete state;
+    completion({mapLibusb(result), 0, "libusb transfer submission failed"});
+    return transport::kInvalidOperationId;
+}
+
+transport::OperationId productionSubmitControl(
+        void *, void *handle, const transport::ControlRequest &request,
+        transport::MutableBufferView buffer, transport::CompletionCallback completion) {
+    auto *state = new (std::nothrow) ProductionTransfer;
+    if (!state) {
+        completion({BackendStatus::InternalFailure, 0, "transfer allocation failed"});
+        return transport::kInvalidOperationId;
+    }
+    state->transfer = libusb_alloc_transfer(0);
+    if (!state->transfer) {
+        delete state;
+        completion({BackendStatus::InternalFailure, 0, "libusb transfer allocation failed"});
+        return transport::kInvalidOperationId;
+    }
+    try {
+        state->controlBuffer.resize(LIBUSB_CONTROL_SETUP_SIZE + buffer.capacity);
+    } catch (...) {
+        libusb_free_transfer(state->transfer);
+        delete state;
+        completion({BackendStatus::InternalFailure, 0, "control buffer allocation failed"});
+        return transport::kInvalidOperationId;
+    }
+    state->completion = std::move(completion);
+    state->callerBuffer = buffer;
+    state->direction = request.direction;
+    state->control = true;
+    libusb_fill_control_setup(state->controlBuffer.data(), request.requestType, request.request,
+                              request.value, request.index, buffer.capacity);
+    if (request.direction == transport::Direction::Out && buffer.capacity != 0) {
+        std::copy_n(buffer.data, buffer.capacity,
+                    state->controlBuffer.data() + LIBUSB_CONTROL_SETUP_SIZE);
+    }
+    libusb_fill_control_transfer(state->transfer, static_cast<libusb_device_handle *>(handle),
+        state->controlBuffer.data(), productionTransferCompleted, state,
+        request.timeoutMilliseconds);
+    return submitProductionTransfer(state);
+}
+
+transport::OperationId productionSubmitEndpoint(
+        void *, void *handle, const transport::EndpointTransferRequest &request,
+        transport::MutableBufferView buffer, transport::CompletionCallback completion) {
+    auto *state = new (std::nothrow) ProductionTransfer;
+    if (!state) {
+        completion({BackendStatus::InternalFailure, 0, "transfer allocation failed"});
+        return transport::kInvalidOperationId;
+    }
+    state->transfer = libusb_alloc_transfer(0);
+    if (!state->transfer) {
+        delete state;
+        completion({BackendStatus::InternalFailure, 0, "libusb transfer allocation failed"});
+        return transport::kInvalidOperationId;
+    }
+    state->completion = std::move(completion);
+    state->callerBuffer = buffer;
+    state->direction = request.direction;
+    if (request.transferType == transport::TransferType::Bulk) {
+        libusb_fill_bulk_transfer(state->transfer, static_cast<libusb_device_handle *>(handle),
+            request.endpointAddress, buffer.data, buffer.capacity,
+            productionTransferCompleted, state, request.timeoutMilliseconds);
+    } else {
+        libusb_fill_interrupt_transfer(state->transfer, static_cast<libusb_device_handle *>(handle),
+            request.endpointAddress, buffer.data, buffer.capacity,
+            productionTransferCompleted, state, request.timeoutMilliseconds);
+    }
+    return submitProductionTransfer(state);
+}
+
+bool productionCancelTransfer(void *, transport::OperationId operation) {
+    auto *transfer = reinterpret_cast<libusb_transfer *>(
+        static_cast<std::uintptr_t>(operation));
+    std::lock_guard<std::mutex> lock(productionTransfersMutex);
+    return productionTransfers.count(transfer) != 0
+        && libusb_cancel_transfer(transfer) == LIBUSB_SUCCESS;
+}
 #else
 int productionDuplicateFd(void *, int) { return -1; }
 void productionCloseFd(void *, int) {}
@@ -210,6 +354,19 @@ BackendStatus unsupportedOperation(void *, void *, std::uint8_t) {
 BackendStatus unsupportedAlternate(void *, void *, std::uint8_t, std::uint8_t) {
     return BackendStatus::UnsupportedOperation;
 }
+transport::OperationId unsupportedControlTransfer(
+        void *, void *, const transport::ControlRequest &, transport::MutableBufferView,
+        transport::CompletionCallback completion) {
+    completion({BackendStatus::UnsupportedOperation, 0, "unsupported platform"});
+    return transport::kInvalidOperationId;
+}
+transport::OperationId unsupportedEndpointTransfer(
+        void *, void *, const transport::EndpointTransferRequest &, transport::MutableBufferView,
+        transport::CompletionCallback completion) {
+    completion({BackendStatus::UnsupportedOperation, 0, "unsupported platform"});
+    return transport::kInvalidOperationId;
+}
+bool unsupportedCancelTransfer(void *, transport::OperationId) { return false; }
 #endif
 
 void cleanupOpenFailure(const AndroidUsbBackendHooks &hooks, int ownedFd,
@@ -225,7 +382,7 @@ void cleanupOpenFailure(const AndroidUsbBackendHooks &hooks, int ownedFd,
 bool AndroidUsbBackendHooks::isValid() const noexcept {
     return duplicateFd && closeFd && acquireRuntime && wrapDevice && extractDescriptors &&
         closeHandle && selectConfiguration && claimInterface && selectAlternateSetting &&
-        releaseInterface;
+        releaseInterface && submitControlTransfer && submitEndpointTransfer && cancelTransfer;
 }
 
 AndroidUsbBackendFactory::AndroidUsbBackendFactory(AndroidUsbBackendHooks hooks) noexcept
@@ -332,18 +489,22 @@ BackendStatus AndroidUsbBackend::releaseInterface(std::uint8_t number) {
 }
 
 transport::OperationId AndroidUsbBackend::submitControl(
-        const transport::ControlRequest &, transport::MutableBufferView,
+        const transport::ControlRequest &request, transport::MutableBufferView buffer,
         transport::CompletionCallback completion) {
-    if (completion) completion({BackendStatus::UnsupportedOperation, 0, "not implemented"});
-    return transport::kInvalidOperationId;
+    if (!handle_ || !completion) return transport::kInvalidOperationId;
+    return hooks_.submitControlTransfer(
+        hooks_.userData, handle_, request, buffer, std::move(completion));
 }
 transport::OperationId AndroidUsbBackend::submitEndpoint(
-        const transport::EndpointTransferRequest &, transport::MutableBufferView,
+        const transport::EndpointTransferRequest &request, transport::MutableBufferView buffer,
         transport::CompletionCallback completion) {
-    if (completion) completion({BackendStatus::UnsupportedOperation, 0, "not implemented"});
-    return transport::kInvalidOperationId;
+    if (!handle_ || !completion) return transport::kInvalidOperationId;
+    return hooks_.submitEndpointTransfer(
+        hooks_.userData, handle_, request, buffer, std::move(completion));
 }
-bool AndroidUsbBackend::cancel(transport::OperationId) { return false; }
+bool AndroidUsbBackend::cancel(transport::OperationId operation) {
+    return hooks_.cancelTransfer(hooks_.userData, operation);
+}
 
 void AndroidUsbBackend::close() noexcept {
     if (handle_) {
@@ -363,12 +524,14 @@ AndroidUsbBackendHooks productionAndroidUsbBackendHooks() noexcept {
     return {nullptr, productionDuplicateFd, productionCloseFd, productionAcquireRuntime,
             productionWrapDevice, productionExtractDescriptors, productionCloseHandle,
             productionSelectConfiguration, productionClaimInterface,
-            productionSelectAlternate, productionReleaseInterface};
+            productionSelectAlternate, productionReleaseInterface,
+            productionSubmitControl, productionSubmitEndpoint, productionCancelTransfer};
 #else
     return {nullptr, productionDuplicateFd, productionCloseFd, productionAcquireRuntime,
             productionWrapDevice, productionExtractDescriptors, productionCloseHandle,
             unsupportedOperation, unsupportedOperation, unsupportedAlternate,
-            unsupportedOperation};
+            unsupportedOperation, unsupportedControlTransfer,
+            unsupportedEndpointTransfer, unsupportedCancelTransfer};
 #endif
 }
 

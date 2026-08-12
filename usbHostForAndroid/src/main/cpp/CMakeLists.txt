@@ -110,6 +110,7 @@ if(USBHOST_BUILD_TESTS)
     add_executable(usbhost_tests
         tests/session_test.cpp
         tests/android_usb_backend_contract_test.cpp
+        tests/android_usb_transfer_contract_test.cpp
         tests/libusb_runtime_contract_test.cpp
         tests/scripted_usb_backend_test.cpp
         tests/status_contract_test.cpp
