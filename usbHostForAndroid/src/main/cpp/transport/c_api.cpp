@@ -1,11 +1,13 @@
 #include "usbhost/transport.h"
 
 #include <algorithm>
+#include <condition_variable>
 #include <cstdint>
 #include <cstring>
 #include <memory>
 #include <mutex>
 #include <string>
+#include <thread>
 #include <unordered_map>
 #include <unordered_set>
 #include <utility>
@@ -19,7 +21,9 @@
 namespace {
 
 using usbhost::transport::DeviceDescriptor;
+using usbhost::transport::EndpointDescriptor;
 using usbhost::transport::InterfaceClaimToken;
+using usbhost::transport::TransferType;
 using usbhost::transport::TransportError;
 using usbhost::transport::TransportSession;
 
@@ -92,8 +96,78 @@ const usbhost::transport::EndpointDescriptor *endpointAt(
         ? &alternate->endpoints[endpointIndex] : nullptr;
 }
 
+bool claimedEndpoint(usbhost_transport_session handle,
+                     const std::shared_ptr<TransportSession> &session,
+                     std::uint8_t endpointAddress, TransferType transferType,
+                     InterfaceClaimToken &outToken, EndpointDescriptor &outEndpoint) {
+    std::unordered_map<std::uint8_t, InterfaceClaimToken> claims;
+    {
+        std::lock_guard<std::mutex> lock(cApiStateMutex);
+        const auto found = claimTokens.find(handle);
+        if (found == claimTokens.end()) return false;
+        claims = found->second;
+    }
+    const DeviceDescriptor snapshot = session->descriptorSnapshot();
+    for (const auto &configuration : snapshot.configurations) {
+        if (!configuration.active) continue;
+        for (const auto &interfaceDescriptor : configuration.interfaces) {
+            const auto token = claims.find(interfaceDescriptor.interfaceNumber);
+            if (token == claims.end()) continue;
+            for (const auto &alternate : interfaceDescriptor.alternateSettings) {
+                if (alternate.alternateSetting != interfaceDescriptor.activeAlternateSetting)
+                    continue;
+                const auto endpoint = std::find_if(
+                    alternate.endpoints.begin(), alternate.endpoints.end(),
+                    [endpointAddress, transferType](const EndpointDescriptor &candidate) {
+                        return candidate.address == endpointAddress &&
+                            candidate.transferType == transferType;
+                    });
+                if (endpoint != alternate.endpoints.end()) {
+                    outToken = token->second;
+                    outEndpoint = *endpoint;
+                    return true;
+                }
+            }
+        }
+    }
+    return false;
+}
+
 #if defined(USBHOST_BUILD_TESTS)
-struct FixtureBackendState { int closeCalls{0}; };
+usbhost::transport::BackendStatus fixtureBackendStatus(usbhost_status status) {
+    using usbhost::transport::BackendStatus;
+    switch (status) {
+        case USBHOST_OK: return BackendStatus::Success;
+        case USBHOST_INVALID_ARGUMENT: return BackendStatus::InvalidArgument;
+        case USBHOST_PERMISSION_DENIED: return BackendStatus::PermissionDenied;
+        case USBHOST_UNSUPPORTED_DEVICE: return BackendStatus::UnsupportedDevice;
+        case USBHOST_BUSY: return BackendStatus::Busy;
+        case USBHOST_TIMEOUT: return BackendStatus::Timeout;
+        case USBHOST_STALL: return BackendStatus::Stall;
+        case USBHOST_CANCELLED: return BackendStatus::Cancelled;
+        case USBHOST_DISCONNECTED: return BackendStatus::Disconnected;
+        case USBHOST_USB_ERROR: return BackendStatus::UsbFailure;
+        case USBHOST_UNSUPPORTED_OPERATION: return BackendStatus::UnsupportedOperation;
+        default: return BackendStatus::InternalFailure;
+    }
+}
+
+struct FixtureBackendState {
+    int closeCalls{0};
+    std::mutex mutex;
+    std::condition_variable submittedCondition;
+    usbhost::transport::CompletionCallback pending;
+    usbhost::transport::BackendStatus completionStatus{
+        usbhost::transport::BackendStatus::Success};
+    std::uint32_t actualLength{0};
+    bool deferUntilCancel{false};
+    bool submitted{false};
+    TransferType observedType{TransferType::Isochronous};
+    std::uint8_t observedEndpoint{0};
+};
+
+std::thread fixtureCancelWorker;
+int fixtureCancelStatus = USBHOST_INTERNAL_ERROR;
 
 class FixtureBackend final : public usbhost::transport::UsbBackend {
 public:
@@ -118,7 +192,8 @@ public:
             endpoint.address = static_cast<std::uint8_t>(0x81 + alternateNumber);
             endpoint.number = static_cast<std::uint8_t>(1 + alternateNumber);
             endpoint.direction = Direction::In;
-            endpoint.transferType = TransferType::Bulk;
+            endpoint.transferType = alternateNumber == 0
+                ? TransferType::Bulk : TransferType::Interrupt;
             endpoint.maximumPacketSize = 64;
             endpoint.interfaceNumber = 3;
             endpoint.alternateSetting = alternateNumber;
@@ -152,20 +227,51 @@ public:
     }
     usbhost::transport::OperationId submitControl(
             const usbhost::transport::ControlRequest &, usbhost::transport::MutableBufferView,
-            usbhost::transport::CompletionCallback) override {
-        return usbhost::transport::kInvalidOperationId;
+            usbhost::transport::CompletionCallback completion) override {
+        return submit(TransferType::Control, 0, std::move(completion));
     }
     usbhost::transport::OperationId submitEndpoint(
-            const usbhost::transport::EndpointTransferRequest &,
+            const usbhost::transport::EndpointTransferRequest &request,
             usbhost::transport::MutableBufferView,
-            usbhost::transport::CompletionCallback) override {
-        return usbhost::transport::kInvalidOperationId;
+            usbhost::transport::CompletionCallback completion) override {
+        return submit(request.transferType, request.endpointAddress, std::move(completion));
     }
-    bool cancel(usbhost::transport::OperationId) override { return false; }
+    bool cancel(usbhost::transport::OperationId operation) override {
+        usbhost::transport::CompletionCallback completion;
+        usbhost::transport::BackendCompletion result;
+        {
+            std::lock_guard<std::mutex> lock(state_->mutex);
+            if (operation != 73 || !state_->pending) return false;
+            completion = std::move(state_->pending);
+            result = {state_->completionStatus, state_->actualLength, "fixture completion"};
+            state_->submitted = false;
+        }
+        completion(std::move(result));
+        return true;
+    }
     void close() noexcept override {
         if (!closed_) { closed_ = true; ++state_->closeCalls; }
     }
 private:
+    usbhost::transport::OperationId submit(
+            TransferType type, std::uint8_t endpoint,
+            usbhost::transport::CompletionCallback completion) {
+        usbhost::transport::BackendCompletion result;
+        bool deferred = false;
+        {
+            std::lock_guard<std::mutex> lock(state_->mutex);
+            state_->observedType = type;
+            state_->observedEndpoint = endpoint;
+            state_->submitted = true;
+            deferred = state_->deferUntilCancel;
+            result = {state_->completionStatus, state_->actualLength, "fixture completion"};
+            if (deferred) state_->pending = std::move(completion);
+        }
+        state_->submittedCondition.notify_all();
+        if (!deferred) completion(std::move(result));
+        return 73;
+    }
+
     std::shared_ptr<FixtureBackendState> state_;
     DeviceDescriptor descriptor_;
     bool closed_{false};
@@ -229,7 +335,7 @@ usbhost_status usbhost_transport_cancel(usbhost_transport_session handle) {
     try {
         auto session = findSession(handle);
         if (!session) return finish(USBHOST_INVALID_STATE, "unknown session");
-        return finish(USBHOST_INVALID_STATE, "no active transfer");
+        return finish(session->cancelActiveTransfer());
     } catch (...) { return internalFailure(); }
 }
 
@@ -534,8 +640,81 @@ usbhost_status usbhost_transport_release_interface(
     } catch (...) { return internalFailure(); }
 }
 
+usbhost_status usbhost_transport_control_transfer(
+        usbhost_transport_session handle, std::uint8_t request_type,
+        std::uint8_t request, std::uint16_t value, std::uint16_t index,
+        std::uint8_t *buffer, std::uint32_t length, std::uint32_t timeout_ms,
+        std::uint32_t *out_actual_length) {
+    if (!out_actual_length) return invalid("actual length output is required");
+    *out_actual_length = 0;
+    if (length != 0 && !buffer) return invalid("invalid transfer buffer");
+    try {
+        auto session = findSession(handle);
+        if (!session) return finish(USBHOST_INVALID_STATE, "unknown session");
+        usbhost::transport::ControlRequest transfer;
+        transfer.requestType = request_type;
+        transfer.request = request;
+        transfer.value = value;
+        transfer.index = index;
+        transfer.direction = (request_type & 0x80u) != 0
+            ? usbhost::transport::Direction::In : usbhost::transport::Direction::Out;
+        transfer.buffer = {0, length};
+        transfer.timeoutMilliseconds = timeout_ms;
+        transfer.generation = session->descriptorSnapshot().generation;
+        const auto result = session->controlTransfer(transfer, {buffer, length});
+        *out_actual_length = result.actualLength;
+        return finish(result.status, result.diagnostic);
+    } catch (...) { return internalFailure(); }
+}
+
+usbhost_status endpointTransfer(
+        usbhost_transport_session handle, std::uint8_t endpoint_address,
+        std::uint8_t *buffer, std::uint32_t length, std::uint32_t timeout_ms,
+        std::uint32_t *out_actual_length, TransferType transfer_type) {
+    if (!out_actual_length) return invalid("actual length output is required");
+    *out_actual_length = 0;
+    if (length != 0 && !buffer) return invalid("invalid transfer buffer");
+    try {
+        auto session = findSession(handle);
+        if (!session) return finish(USBHOST_INVALID_STATE, "unknown session");
+        InterfaceClaimToken token;
+        EndpointDescriptor endpoint;
+        if (!claimedEndpoint(handle, session, endpoint_address, transfer_type, token, endpoint))
+            return invalid("endpoint is not active for a claimed interface");
+        usbhost::transport::EndpointTransferRequest transfer;
+        transfer.transferType = transfer_type;
+        transfer.endpointAddress = endpoint_address;
+        transfer.direction = (endpoint_address & 0x80u) != 0
+            ? usbhost::transport::Direction::In : usbhost::transport::Direction::Out;
+        transfer.buffer = {0, length};
+        transfer.timeoutMilliseconds = timeout_ms;
+        transfer.generation = endpoint.generation;
+        const auto result = session->endpointTransfer(
+            token, endpoint, transfer, {buffer, length});
+        *out_actual_length = result.actualLength;
+        return finish(result.status, result.diagnostic);
+    } catch (...) { return internalFailure(); }
+}
+
+usbhost_status usbhost_transport_bulk_transfer(
+        usbhost_transport_session handle, std::uint8_t endpoint_address,
+        std::uint8_t *buffer, std::uint32_t length, std::uint32_t timeout_ms,
+        std::uint32_t *out_actual_length) {
+    return endpointTransfer(handle, endpoint_address, buffer, length, timeout_ms,
+                            out_actual_length, TransferType::Bulk);
+}
+
+usbhost_status usbhost_transport_interrupt_transfer(
+        usbhost_transport_session handle, std::uint8_t endpoint_address,
+        std::uint8_t *buffer, std::uint32_t length, std::uint32_t timeout_ms,
+        std::uint32_t *out_actual_length) {
+    return endpointTransfer(handle, endpoint_address, buffer, length, timeout_ms,
+                            out_actual_length, TransferType::Interrupt);
+}
+
 #if defined(USBHOST_BUILD_TESTS)
 void usbhost_test_transport_install_fixture(int open_status) {
+    if (fixtureCancelWorker.joinable()) fixtureCancelWorker.join();
     fixtureOpenStatus = open_status;
     fixtureObservedFd = -1;
     fixtureFactory.state.reset();
@@ -543,6 +722,44 @@ void usbhost_test_transport_install_fixture(int open_status) {
 int usbhost_test_transport_observed_fd(void) { return fixtureObservedFd; }
 int usbhost_test_transport_backend_close_count(void) {
     return fixtureFactory.state ? fixtureFactory.state->closeCalls : 0;
+}
+void usbhost_test_transport_set_completion(
+        int status, std::uint32_t actual_length, int defer_until_cancel) {
+    if (!fixtureFactory.state) return;
+    std::lock_guard<std::mutex> lock(fixtureFactory.state->mutex);
+    fixtureFactory.state->completionStatus = fixtureBackendStatus(
+        static_cast<usbhost_status>(status));
+    fixtureFactory.state->actualLength = actual_length;
+    fixtureFactory.state->deferUntilCancel = defer_until_cancel != 0;
+    fixtureFactory.state->submitted = false;
+    fixtureFactory.state->pending = {};
+}
+void usbhost_test_transport_schedule_cancel(usbhost_transport_session handle) {
+    if (fixtureCancelWorker.joinable()) fixtureCancelWorker.join();
+    const auto state = fixtureFactory.state;
+    fixtureCancelStatus = USBHOST_INTERNAL_ERROR;
+    fixtureCancelWorker = std::thread([state, handle] {
+        if (!state) return;
+        {
+            std::unique_lock<std::mutex> lock(state->mutex);
+            state->submittedCondition.wait(lock, [state] { return state->submitted; });
+        }
+        fixtureCancelStatus = usbhost_transport_cancel(handle);
+    });
+}
+int usbhost_test_transport_join_cancel(void) {
+    if (fixtureCancelWorker.joinable()) fixtureCancelWorker.join();
+    return fixtureCancelStatus;
+}
+int usbhost_test_transport_observed_transfer_type(void) {
+    if (!fixtureFactory.state) return -1;
+    std::lock_guard<std::mutex> lock(fixtureFactory.state->mutex);
+    return static_cast<int>(fixtureFactory.state->observedType);
+}
+int usbhost_test_transport_observed_endpoint(void) {
+    if (!fixtureFactory.state) return -1;
+    std::lock_guard<std::mutex> lock(fixtureFactory.state->mutex);
+    return fixtureFactory.state->observedEndpoint;
 }
 #endif
 
