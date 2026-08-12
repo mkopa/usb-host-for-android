@@ -133,7 +133,7 @@ STLINK read-only/mutation-denial tests pass through the shared runtime.
 - [X] T042 [US3] Add caller-connection and native-FD ownership regression tests and wire STLINK sessions to the shared runtime in `usbHostForAndroid/src/main/cpp/tests/stlink_backend_transport_test.cpp` and `usbHostForAndroid/src/main/cpp/stlink/stlink_backend.cpp`
 - [X] T043 [US3] Extend read-only and mutation-denial regression coverage without adding mutating exports in `usbHostForAndroid/src/main/cpp/tests/c_api_contract_test.c` and `usbHostForAndroid/src/test/java/info/marcin/usbhost/StlinkSessionTest.java`
 - [X] T044 [US3] Verify transport classes, headers, symbols, source docs, and previous STLINK surface in local Maven publication from `usbHostForAndroid/build.gradle` and `scripts/verify-publication.ps1`
-- [ ] T045 [P] [US3] Document a minimal Java/Kotlin adapter and C/C++/future-Rust consumption boundary in `docs/transport-adapter-example.md` and `docs/native-api.md`
+- [X] T045 [P] [US3] Document a minimal Java/Kotlin adapter and C/C++/future-Rust consumption boundary in `docs/transport-adapter-example.md` and `docs/native-api.md`
 
 **Checkpoint**: The artifact exposes a stable adapter foundation, and STLINK-V3 remains the only
 adapter with its existing verified support claim and unchanged safety surface.
