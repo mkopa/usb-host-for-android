@@ -59,6 +59,9 @@ public class GenericUsbInterfaceTest {
         int endpointAddress;
         long[] bulkResult = {0, 0};
         long[] interruptResult = {0, 0};
+        byte[] additionalDescriptor;
+        long[] controlResult = {0, 0};
+        int controlCount;
         FakeTransport(long session) { this.session = session; }
         @Override public long[] openSession(int fd) { return new long[] {0, session}; }
         @Override public long[] getDeviceDescriptor(long ignored) {
@@ -66,7 +69,8 @@ public class GenericUsbInterfaceTest {
                     0x1234, 0x5678, 0x100, 1};
         }
         @Override public long[] getConfiguration(long ignored, int index) {
-            return new long[] {0, generation, 0, 1, 0x80, 50, 1, 1, 0};
+            return new long[] {0, generation, 0, 1, 0x80, 50, 1, 1,
+                    additionalDescriptor == null ? 0 : 1};
         }
         @Override public long[] getInterface(long ignored, int configuration, int index) {
             return new long[] {0, generation, 0, 3, activeAlternate, 1, 2};
@@ -82,7 +86,9 @@ public class GenericUsbInterfaceTest {
         }
         @Override public byte[] getAdditionalDescriptor(long ignored, int scope, long snapshot,
                 int configuration, int iface, int alternate, int endpoint, int index) {
-            throw new AssertionError("No fixture descriptors");
+            if (additionalDescriptor == null)
+                throw new AssertionError("No fixture descriptors");
+            return additionalDescriptor.clone();
         }
         @Override public int selectConfiguration(long ignored, int value) { return 0; }
         @Override public int claimInterface(long ignored, int number) { return 0; }
@@ -97,7 +103,8 @@ public class GenericUsbInterfaceTest {
         }
         @Override public long[] controlTransfer(long session, UsbControlRequest request,
                 byte[] buffer, int offset, int length, int timeoutMillis) {
-            throw new AssertionError("Unexpected control transfer");
+            ++controlCount;
+            return controlResult.clone();
         }
         @Override public long[] bulkTransfer(long session, int endpoint, byte[] buffer,
                 int offset, int length, int timeoutMillis) {

@@ -125,7 +125,7 @@ STLINK read-only/mutation-denial tests pass through the shared runtime.
 
 ### Test-first implementation slices for User Story 3
 
-- [ ] T037 [P] [US3] Add a managed protocol-adapter fixture that reads an additional descriptor and performs one scripted transfer using only public APIs in `usbHostForAndroid/src/test/java/info/marcin/usbhost/transport/ProtocolAdapterContractTest.java`
+- [X] T037 [P] [US3] Add a managed protocol-adapter fixture that reads an additional descriptor and performs one scripted transfer using only public APIs in `usbHostForAndroid/src/test/java/info/marcin/usbhost/transport/ProtocolAdapterContractTest.java`
 - [ ] T038 [P] [US3] Add exception-free C and C++ Prefab consumer fixtures covering all transport records and functions in `usbHostForAndroid/src/main/cpp/tests/transport_c_consumer_test.c` and `usbHostForAndroid/src/main/cpp/tests/transport_cxx_consumer_test.cpp`
 - [ ] T039 [US3] Add previous-baseline enum/struct/symbol checks and extend additive export visibility in `usbHostForAndroid/src/main/cpp/tests/transport_compatibility_test.cpp`, `usbHostForAndroid/src/main/cpp/exports.map`, and `scripts/verify-publication.ps1`
 - [ ] T040 [US3] Add adapter callback contracts and implement the internal STLINK-to-generic-transport bridge in `usbHostForAndroid/src/main/cpp/tests/stlink_transport_adapter_test.cpp`, `usbHostForAndroid/src/main/cpp/stlink/stlink_transport_adapter.hpp`, and `usbHostForAndroid/src/main/cpp/stlink/stlink_transport_adapter.cpp`
