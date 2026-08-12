@@ -3,7 +3,9 @@ param(
     [string]$FeatureId = '004-generic-usb-transport',
     [string]$TasksPath = (Join-Path $PSScriptRoot '..\specs\004-generic-usb-transport\tasks.md'),
     [string]$Repository = 'mkopa/usb-host-for-android',
-    [string]$IssuesJson
+    [string]$IssuesJson,
+    [string]$RepositoryRoot = (Join-Path $PSScriptRoot '..'),
+    [string]$CommitRange = 'main..HEAD'
 )
 
 $ErrorActionPreference = 'Stop'
@@ -44,6 +46,10 @@ foreach ($group in $taskGroups) {
 }
 
 $taskIds = @($taskGroups | ForEach-Object Name | Sort-Object)
+$expectedTaskIds = @(1..$taskIds.Count | ForEach-Object { 'T{0:D3}' -f $_ })
+if (@(Compare-Object $expectedTaskIds $taskIds).Count -ne 0) {
+    Add-VerificationError $errors 'Task identifiers are not a contiguous T001-based sequence.'
+}
 $taskSet = @{}
 foreach ($taskId in $taskIds) {
     $taskSet[$taskId] = $true
@@ -98,6 +104,9 @@ foreach ($issue in $issues) {
             Add-VerificationError $errors "Issue #$number maps orphan marker $FeatureId/$taskId."
             continue
         }
+        if ([string]$issue.title -notmatch "^$taskId\s*:") {
+            Add-VerificationError $errors "Issue #$number title does not start with '$($taskId):'."
+        }
         $taskIssues[$taskId].Add($issue)
     }
 }
@@ -112,9 +121,25 @@ foreach ($taskId in $taskIds) {
     }
 }
 
+$resolvedRepositoryRoot = (Resolve-Path -LiteralPath $RepositoryRoot).Path
+$identityLines = @(& git -C $resolvedRepositoryRoot log $CommitRange `
+    '--format=%H%x09%an%x09%ae%x09%cn%x09%ce')
+if ($LASTEXITCODE -ne 0) {
+    throw "Unable to inspect commit identity for range $CommitRange."
+}
+foreach ($line in $identityLines) {
+    $fields = $line -split "`t", 5
+    if ($fields.Count -ne 5 -or $fields[1] -ne 'Marci Kopa' -or
+            $fields[2] -ne 'marcin@marcin.info' -or $fields[3] -ne 'Marci Kopa' -or
+            $fields[4] -ne 'marcin@marcin.info') {
+        $commit = if ($fields.Count -gt 0) { $fields[0] } else { '<unknown>' }
+        Add-VerificationError $errors "Commit $commit violates the required author/committer identity."
+    }
+}
+
 if ($errors.Count -gt 0) {
     $errors | Sort-Object -Unique | ForEach-Object { Write-Error $_ }
     throw "Task-to-issue verification failed with $($errors.Count) finding(s)."
 }
 
-Write-Output "Verified $($taskIds.Count) unique tasks and exactly one GitHub issue marker per task for $FeatureId."
+Write-Output "Verified $($taskIds.Count) contiguous tasks, one issue marker/title per task, and commit identity for $CommitRange."

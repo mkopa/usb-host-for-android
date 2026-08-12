@@ -2,7 +2,9 @@
 param([string]$RepositoryRoot)
 
 $ErrorActionPreference = 'Stop'
+Set-StrictMode -Version Latest
 if (-not $RepositoryRoot) { $RepositoryRoot = Split-Path -Parent $PSScriptRoot }
+$RepositoryRoot = (Resolve-Path -LiteralPath $RepositoryRoot).Path
 $verifiedAar = Join-Path $RepositoryRoot 'usbHostForAndroid\build\verified-aar'
 $sdk = if ($env:ANDROID_SDK_ROOT) { $env:ANDROID_SDK_ROOT } else { $env:ANDROID_HOME }
 if (-not $sdk) {
@@ -109,4 +111,107 @@ foreach ($statusLine in ($baseline | Where-Object { $_ -match '^USBHOST_[A-Z_]+=
     }
 }
 
-Write-Host "Verified $($required.Count) stable public C ABI symbols in $inspected JNI/Prefab libraries, headers, and the previous STLINK baseline."
+$classesJar = Join-Path $verifiedAar 'classes.jar'
+if (-not (Test-Path -LiteralPath $classesJar -PathType Leaf)) {
+    throw 'Published AAR classes.jar is absent.'
+}
+Add-Type -AssemblyName System.IO.Compression.FileSystem
+$archive = [System.IO.Compression.ZipFile]::OpenRead($classesJar)
+try {
+    $classEntries = @($archive.Entries | ForEach-Object FullName)
+} finally {
+    $archive.Dispose()
+}
+$managedBaseline = Get-Content -LiteralPath (
+    Join-Path $RepositoryRoot 'usbHostForAndroid\src\test\resources\public-managed-api-baseline.txt') |
+    Where-Object { $_ -match '^(?:class|enum)\s+(.+)$' } |
+    ForEach-Object { ($Matches[1] -replace '\.', '/') + '.class' }
+$transportClasses = @(
+    'AdditionalUsbDescriptor', 'GenericUsbAlternateSetting', 'GenericUsbConfiguration',
+    'GenericUsbDevice', 'GenericUsbDeviceDescriptor', 'GenericUsbEndpoint',
+    'GenericUsbInterface', 'GenericUsbInterfaceDescriptor', 'UsbControlRequest',
+    'UsbDirection', 'UsbTransferResult', 'UsbTransferType', 'UsbTransportException',
+    'UsbTransportStatus'
+) | ForEach-Object { "info/marcin/usbhost/transport/$_.class" }
+foreach ($managedClass in @($managedBaseline) + @($transportClasses)) {
+    if ($classEntries -notcontains $managedClass) {
+        throw "Required managed API class is absent from the AAR: $managedClass"
+    }
+}
+
+$pom = Get-ChildItem -LiteralPath (
+    Join-Path $RepositoryRoot 'usbHostForAndroid\build\repository\info\marcin\usbhost\usb-host-for-android\0.1.0') `
+    -Filter '*.pom' -File | Select-Object -First 1
+if (-not $pom) { throw 'Local Maven POM is absent.' }
+[xml]$pomXml = Get-Content -LiteralPath $pom.FullName -Raw
+$namespace = [System.Xml.XmlNamespaceManager]::new($pomXml.NameTable)
+$namespace.AddNamespace('m', 'http://maven.apache.org/POM/4.0.0')
+$publishedDependencies = @($pomXml.SelectNodes('//m:dependency', $namespace) | ForEach-Object {
+    "$($_.groupId):$($_.artifactId):$($_.version):$($_.scope)"
+})
+$approvedPublishedDependencies = @('org.jetbrains.kotlin:kotlin-stdlib:2.3.21:compile')
+$dependencyDifference = @(Compare-Object $approvedPublishedDependencies $publishedDependencies)
+if ($dependencyDifference.Count -ne 0) {
+    throw "Published runtime dependency set changed: $($publishedDependencies -join ', ')"
+}
+
+$expectedSubmodules = @{
+    'third_party/libusb' = 'https://github.com/libusb/libusb.git'
+    'third_party/stlink' = 'https://github.com/stlink-org/stlink.git'
+}
+$configuredSubmodulePaths = @(& git -C $RepositoryRoot config --file .gitmodules --get-regexp '\.path$')
+if ($LASTEXITCODE -ne 0) { throw 'Unable to inspect Git submodule paths.' }
+$observedSubmodules = @{}
+foreach ($entry in $configuredSubmodulePaths) {
+    $key, $path = $entry -split '\s+', 2
+    $section = $key -replace '\.path$', ''
+    $url = (& git -C $RepositoryRoot config --file .gitmodules --get "$section.url").Trim()
+    $observedSubmodules[$path] = $url
+}
+if ($observedSubmodules.Count -ne $expectedSubmodules.Count) {
+    throw 'The tracked third-party submodule set changed.'
+}
+foreach ($path in $expectedSubmodules.Keys) {
+    if (-not $observedSubmodules.ContainsKey($path) -or
+            $observedSubmodules[$path] -ne $expectedSubmodules[$path]) {
+        throw "Third-party submodule provenance changed: $path"
+    }
+}
+
+$allowedGradleDependencies = @(
+    "implementation project(':usbHostForAndroid')", 'implementation composeBom',
+    'def composeBom = platform("androidx.compose:compose-bom:${providers.gradleProperty(''COMPOSE_BOM_VERSION'').get()}")',
+    "implementation 'androidx.activity:activity-compose:1.13.0'",
+    "implementation 'androidx.compose.material3:material3'",
+    "implementation 'androidx.compose.ui:ui'",
+    "implementation 'androidx.compose.ui:ui-tooling-preview'",
+    "debugImplementation 'androidx.compose.ui:ui-tooling'",
+    "implementation 'info.marcin.usbhost:usb-host-for-android:0.1.0'",
+    "testImplementation 'junit:junit:4.13.2'"
+)
+$gradleDependencyLines = @(& git -C $RepositoryRoot grep -h -E `
+    '^\s*((api|implementation|compileOnly|runtimeOnly|debugImplementation|testImplementation|androidTestImplementation)\s+|def composeBom = platform)' `
+    -- '*.gradle' '*.gradle.kts' 2>$null | ForEach-Object { $_.Trim() } | Sort-Object -Unique)
+if ($LASTEXITCODE -gt 1) { throw 'Unable to audit Gradle dependency declarations.' }
+foreach ($dependencyLine in $gradleDependencyLines) {
+    if ($allowedGradleDependencies -notcontains $dependencyLine) {
+        throw "Unapproved Gradle dependency declaration: $dependencyLine"
+    }
+}
+
+$localPathPattern = @(
+    ('C:' + '[\\/]' + 'Users' + '[\\/]'),
+    ('/' + 'Users' + '/[^/]+' + '/'),
+    ('/' + 'home' + '/[^/]+' + '/')
+) -join '|'
+if (-not [string]::IsNullOrWhiteSpace($env:USBHOST_PUBLIC_PROHIBITED_PATTERN)) {
+    $localPathPattern += '|' + $env:USBHOST_PUBLIC_PROHIBITED_PATTERN
+}
+$publicFindings = @(& git -C $RepositoryRoot grep -I -n -E $localPathPattern -- . 2>$null)
+$grepExit = $LASTEXITCODE
+if ($grepExit -eq 0 -and $publicFindings.Count -gt 0) {
+    throw "Tracked public content contains a prohibited path or configured private pattern: $($publicFindings -join '; ')"
+}
+if ($grepExit -gt 1) { throw 'Unable to audit tracked public content.' }
+
+Write-Host "Verified public content, dependencies, managed API, headers, and $($required.Count) stable C ABI symbols in $inspected JNI/Prefab libraries."

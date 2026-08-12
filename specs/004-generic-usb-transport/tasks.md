@@ -147,7 +147,7 @@ adapter with its existing verified support claim and unchanged safety surface.
 - [X] T046 [P] Document setup, ownership, lifecycle, threading, limits, errors, explicit configuration, and capability non-claims in `docs/transport.md` and `README.md`
 - [X] T047 [P] Add the non-destructive generic USB smoke procedure and sanitized evidence fields in `docs/hardware/evidence-template.md` and `docs/hardware/README.md`
 - [X] T048 Run host CTest with sanitizer support, JUnit, lint, AAR assembly, detached consumer, and publication inspection through `scripts/verify-local.ps1`
-- [ ] T049 Add final public-content, dependency, symbol, API/ABI, task-marker, and commit-identity audit coverage in `scripts/verify-publication.ps1` and `scripts/verify-spec-task-issues.ps1`
+- [X] T049 Add final public-content, dependency, symbol, API/ABI, task-marker, and commit-identity audit coverage in `scripts/verify-publication.ps1` and `scripts/verify-spec-task-issues.ps1`
 - [ ] T050 Execute every command and expected outcome from `specs/004-generic-usb-transport/quickstart.md`, then record the post-design constitution and compatibility result in `specs/004-generic-usb-transport/plan.md`
 
 ---
