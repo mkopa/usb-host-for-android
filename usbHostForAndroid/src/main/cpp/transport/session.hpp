@@ -59,6 +59,7 @@ public:
                                     const EndpointDescriptor &endpoint,
                                     const EndpointTransferRequest &request,
                                     MutableBufferView buffer);
+    TransportError cancelActiveTransfer();
     SessionState state() const;
     DeviceDescriptor descriptorSnapshot() const;
 
@@ -68,7 +69,7 @@ private:
 
     mutable std::mutex mutex_;
     std::condition_variable closedCondition_;
-    std::unique_ptr<UsbBackend> backend_;
+    std::shared_ptr<UsbBackend> backend_;
     DeviceDescriptor descriptor_;
     std::unordered_map<std::uint8_t, InterfaceClaimToken> claims_;
     std::uint64_t nextClaimGeneration_{1};
