@@ -8,6 +8,7 @@ final class TransportNativeBridge {
     static final int INTERFACE_RECORD_LENGTH = 7;
     static final int ALTERNATE_RECORD_LENGTH = 10;
     static final int ENDPOINT_RECORD_LENGTH = 10;
+    static final int TRANSFER_RECORD_LENGTH = 2;
 
     static {
         System.loadLibrary("usbhost");
@@ -31,6 +32,8 @@ final class TransportNativeBridge {
     static native int selectAlternateSetting(long session, int interfaceNumber,
             int alternateSetting);
     static native int releaseInterface(long session, int interfaceNumber);
+    static native long[] controlTransfer(long session, int requestType, int request,
+            int value, int index, byte[] buffer, int offset, int length, int timeoutMillis);
     static native int cancel(long session);
     static native int close(long session);
     static native String lastError();

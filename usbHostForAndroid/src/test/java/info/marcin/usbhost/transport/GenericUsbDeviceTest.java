@@ -72,12 +72,24 @@ public class GenericUsbDeviceTest {
         @Override public int getFileDescriptor() { return fd; }
     }
 
-    private static final class FakeTransport implements TransportOperations {
+    static final class FakeTransport implements TransportOperations {
         int openedFileDescriptor = -1;
         int openCount;
         int closeCount;
         int selectCount;
         int cancelCount;
+        int controlCount;
+        int controlOffset;
+        int controlLength;
+        long[] controlResult = {0, 0};
+
+        @Override public long[] controlTransfer(long session, UsbControlRequest request,
+                byte[] buffer, int offset, int length, int timeoutMillis) {
+            ++controlCount;
+            controlOffset = offset;
+            controlLength = length;
+            return controlResult.clone();
+        }
 
         @Override public long[] openSession(int fd) {
             openedFileDescriptor = fd;
