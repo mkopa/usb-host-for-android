@@ -195,6 +195,7 @@ extern "C" int runTransportCApiSessionTest(void);
 int runTransportAdditionalDescriptorTest();
 int runTransportRegistryTest();
 int runTransportSessionLifecycleTest();
+int runTransportTerminalResultTest();
 int runTransportTypesTest();
 int runTransportValidationTest();
 
@@ -222,6 +223,7 @@ int main() {
     CHECK(runTransportAdditionalDescriptorTest() == 0);
     CHECK(runTransportRegistryTest() == 0);
     CHECK(runTransportSessionLifecycleTest() == 0);
+    CHECK(runTransportTerminalResultTest() == 0);
     CHECK(runTransportTypesTest() == 0);
     CHECK(runTransportValidationTest() == 0);
     CHECK(usbhost_close(0xdeadbeefULL) == USBHOST_OK);

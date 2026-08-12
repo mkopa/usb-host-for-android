@@ -126,6 +126,7 @@ if(USBHOST_BUILD_TESTS)
         tests/transport_c_api_session_test.c
         tests/transport_registry_test.cpp
         tests/transport_session_lifecycle_test.cpp
+        tests/transport_terminal_result_test.cpp
         tests/transport_error_test.cpp
         tests/transport_types_test.cpp
         tests/transport_validation_test.cpp
