@@ -129,6 +129,8 @@ if(USBHOST_BUILD_TESTS)
         tests/transport_jni_transfer_test.cpp
         tests/transport_c_api_session_test.c
         tests/transport_c_api_transfer_test.c
+        tests/transport_c_consumer_test.c
+        tests/transport_cxx_consumer_test.cpp
         tests/transport_registry_test.cpp
         tests/transport_session_lifecycle_test.cpp
         tests/transport_terminal_result_test.cpp
@@ -138,5 +140,7 @@ if(USBHOST_BUILD_TESTS)
         tests/c_api_contract_test.c
         tests/cxx_api_contract_test.cpp)
     target_link_libraries(usbhost_tests PRIVATE usbhost_core Threads::Threads)
+    set_source_files_properties(tests/transport_cxx_consumer_test.cpp
+        PROPERTIES COMPILE_OPTIONS "-fno-exceptions;-fno-rtti")
     add_test(NAME usbhost_tests COMMAND usbhost_tests)
 endif()
