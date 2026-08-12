@@ -426,6 +426,10 @@ TransferResult TransportSession::controlTransfer(
     }
     const TransportError result = makeTransportError(
         completion.status, completion.diagnostic, completion.actualLength);
+    if (result.status == USBHOST_DISCONNECTED) {
+        std::lock_guard<std::mutex> lock(mutex_);
+        if (state_ == SessionState::Open) state_ = SessionState::Failed;
+    }
     return {result.status, result.actualLength, std::move(result.diagnostic)};
 }
 
@@ -492,6 +496,10 @@ TransferResult TransportSession::endpointTransfer(
     }
     const TransportError result = makeTransportError(
         completion.status, completion.diagnostic, completion.actualLength);
+    if (result.status == USBHOST_DISCONNECTED) {
+        std::lock_guard<std::mutex> lock(mutex_);
+        if (state_ == SessionState::Open) state_ = SessionState::Failed;
+    }
     return {result.status, result.actualLength, std::move(result.diagnostic)};
 }
 
