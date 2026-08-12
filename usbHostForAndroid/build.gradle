@@ -151,19 +151,71 @@ tasks.register('verifyReleasePublication') {
         def classEntries = zipTree(classesJar).files.collect {
             it.path.replace('\\', '/')
         }.join('\n')
-        [
-            'info/marcin/usbhost/StlinkSession.class',
+        def previousApi = file('src/test/resources/public-managed-api-baseline.txt')
+                .readLines('UTF-8')
+                .findAll { it ==~ /^(class|enum) .+$/ }
+                .collect { it.split(' ', 2)[1].replace('.', '/') + '.class' }
+        def transportApi = [
             'info/marcin/usbhost/transport/GenericUsbDevice.class',
             'info/marcin/usbhost/transport/GenericUsbInterface.class',
             'info/marcin/usbhost/transport/GenericUsbDeviceDescriptor.class',
             'info/marcin/usbhost/transport/GenericUsbConfiguration.class',
+            'info/marcin/usbhost/transport/GenericUsbAlternateSetting.class',
+            'info/marcin/usbhost/transport/GenericUsbInterfaceDescriptor.class',
             'info/marcin/usbhost/transport/GenericUsbEndpoint.class',
             'info/marcin/usbhost/transport/AdditionalUsbDescriptor.class',
+            'info/marcin/usbhost/transport/UsbControlRequest.class',
+            'info/marcin/usbhost/transport/UsbDirection.class',
+            'info/marcin/usbhost/transport/UsbTransferResult.class',
+            'info/marcin/usbhost/transport/UsbTransferType.class',
+            'info/marcin/usbhost/transport/UsbTransportStatus.class',
             'info/marcin/usbhost/transport/UsbTransportException.class'
-        ].each { requiredClass ->
+        ]
+        (previousApi + transportApi).each { requiredClass ->
             if (!classEntries.contains(requiredClass)) {
                 throw new GradleException(
                         "Required published API is absent from classes.jar: ${requiredClass}")
+            }
+        }
+
+        def sourceEntries = zipTree(sources).files.collect {
+            it.path.replace('\\', '/')
+        }.join('\n')
+        def documentedSources = (previousApi + transportApi).collect {
+            it.replace('.class', '.java')
+        }
+        documentedSources.each { requiredSource ->
+            if (!sourceEntries.contains(requiredSource)) {
+                throw new GradleException(
+                        "Published source is absent from sources.jar: ${requiredSource}")
+            }
+        }
+        ['info/marcin/usbhost/StlinkSession.java',
+         'info/marcin/usbhost/transport/GenericUsbDevice.java'].each { documentedSource ->
+            def sourceFile = zipTree(sources).matching { include "**/${documentedSource}" }.singleFile
+            if (!sourceFile.getText('UTF-8').contains('/**')) {
+                throw new GradleException("Published source lacks API documentation: ${documentedSource}")
+            }
+        }
+
+        def javadocEntries = zipTree(javadoc).files.collect {
+            it.path.replace('\\', '/')
+        }.join('\n')
+        documentedSources.each { requiredSource ->
+            def requiredDoc = requiredSource.replace('.java', '.html')
+            if (!javadocEntries.contains(requiredDoc)) {
+                throw new GradleException(
+                        "Published Javadoc is absent: ${requiredDoc}")
+            }
+        }
+
+        ['usbhost.h', 'transport.h'].each { header ->
+            def publishedHeader = layout.buildDirectory.file(
+                    "verified-aar/prefab/modules/usbhost/include/usbhost/${header}").get().asFile
+            def sourceHeader = file("src/main/cpp/include/usbhost/${header}")
+            if (!publishedHeader.isFile()
+                    || !java.util.Arrays.equals(publishedHeader.bytes, sourceHeader.bytes)) {
+                throw new GradleException("Prefab header is missing or stale: usbhost/${header}")
             }
         }
         ['arm64-v8a', 'armeabi-v7a', 'x86_64'].each { abi ->
@@ -171,6 +223,12 @@ tasks.register('verifyReleasePublication') {
                     "verified-aar/jni/${abi}/libusbhost.so").get().asFile
             if (!nativeLibrary.isFile() || nativeLibrary.length() == 0L) {
                 throw new GradleException("Published AAR is missing JNI library for ${abi}")
+            }
+            def prefabLibrary = layout.buildDirectory.file(
+                    "verified-aar/prefab/modules/usbhost/libs/android.${abi}/libusbhost.so")
+                    .get().asFile
+            if (!prefabLibrary.isFile() || prefabLibrary.length() == 0L) {
+                throw new GradleException("Prefab library is missing for ${abi}")
             }
         }
         if (classEntries.contains('dev/usbhost/android/')) {
