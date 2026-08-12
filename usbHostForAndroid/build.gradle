@@ -151,8 +151,27 @@ tasks.register('verifyReleasePublication') {
         def classEntries = zipTree(classesJar).files.collect {
             it.path.replace('\\', '/')
         }.join('\n')
-        if (!classEntries.contains('info/marcin/usbhost/StlinkSession.class')) {
-            throw new GradleException('Required public namespace is absent from classes.jar')
+        [
+            'info/marcin/usbhost/StlinkSession.class',
+            'info/marcin/usbhost/transport/GenericUsbDevice.class',
+            'info/marcin/usbhost/transport/GenericUsbInterface.class',
+            'info/marcin/usbhost/transport/GenericUsbDeviceDescriptor.class',
+            'info/marcin/usbhost/transport/GenericUsbConfiguration.class',
+            'info/marcin/usbhost/transport/GenericUsbEndpoint.class',
+            'info/marcin/usbhost/transport/AdditionalUsbDescriptor.class',
+            'info/marcin/usbhost/transport/UsbTransportException.class'
+        ].each { requiredClass ->
+            if (!classEntries.contains(requiredClass)) {
+                throw new GradleException(
+                        "Required published API is absent from classes.jar: ${requiredClass}")
+            }
+        }
+        ['arm64-v8a', 'armeabi-v7a', 'x86_64'].each { abi ->
+            def nativeLibrary = layout.buildDirectory.file(
+                    "verified-aar/jni/${abi}/libusbhost.so").get().asFile
+            if (!nativeLibrary.isFile() || nativeLibrary.length() == 0L) {
+                throw new GradleException("Published AAR is missing JNI library for ${abi}")
+            }
         }
         if (classEntries.contains('dev/usbhost/android/')) {
             throw new GradleException('Previous development namespace remains in classes.jar')
