@@ -13,10 +13,19 @@ public final class GenericUsbEndpoint {
     private final int interval;
     private final List<AdditionalUsbDescriptor> additionalDescriptors;
     private final long snapshotGeneration;
+    private final Object ownerToken;
 
     GenericUsbEndpoint(int address, int endpointNumber, UsbDirection direction,
             UsbTransferType transferType, int maximumPacketSize, int interval,
             List<AdditionalUsbDescriptor> additionalDescriptors, long snapshotGeneration) {
+        this(address, endpointNumber, direction, transferType, maximumPacketSize, interval,
+                additionalDescriptors, snapshotGeneration, null);
+    }
+
+    GenericUsbEndpoint(int address, int endpointNumber, UsbDirection direction,
+            UsbTransferType transferType, int maximumPacketSize, int interval,
+            List<AdditionalUsbDescriptor> additionalDescriptors, long snapshotGeneration,
+            Object ownerToken) {
         this.address = ManagedDescriptorSupport.unsigned(address, 0xff, "address");
         this.endpointNumber = ManagedDescriptorSupport.unsigned(
                 endpointNumber, 0x0f, "endpointNumber");
@@ -33,6 +42,7 @@ public final class GenericUsbEndpoint {
         this.additionalDescriptors = ManagedDescriptorSupport.immutableList(
                 additionalDescriptors, "additionalDescriptors");
         this.snapshotGeneration = ManagedDescriptorSupport.generation(snapshotGeneration);
+        this.ownerToken = ownerToken;
     }
 
     public int getAddress() { return address; }
@@ -43,6 +53,7 @@ public final class GenericUsbEndpoint {
     public int getInterval() { return interval; }
     public List<AdditionalUsbDescriptor> getAdditionalDescriptors() { return additionalDescriptors; }
     long getSnapshotGeneration() { return snapshotGeneration; }
+    Object getOwnerToken() { return ownerToken; }
 
     @Override public boolean equals(Object other) {
         if (this == other) return true;

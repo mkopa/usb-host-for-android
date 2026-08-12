@@ -15,13 +15,15 @@ public final class GenericUsbDevice implements AutoCloseable {
 
     private final Object stateLock = new Object();
     private final TransportOperations operations;
+    private final Object ownerToken;
     private long session;
     private GenericUsbDeviceDescriptor descriptor;
 
-    private GenericUsbDevice(long session, TransportOperations operations,
+    private GenericUsbDevice(long session, TransportOperations operations, Object ownerToken,
             GenericUsbDeviceDescriptor descriptor) {
         this.session = session;
         this.operations = operations;
+        this.ownerToken = ownerToken;
         this.descriptor = descriptor;
     }
 
@@ -49,14 +51,15 @@ public final class GenericUsbDevice implements AutoCloseable {
         if (opened[1] == 0) throw failure(
                 UsbTransportStatus.INTERNAL_ERROR, "Native open returned an invalid session");
         long session = opened[1];
+        Object ownerToken = new Object();
         try {
-            GenericUsbDeviceDescriptor descriptor = readDescriptor(session, operations);
+            GenericUsbDeviceDescriptor descriptor = readDescriptor(session, operations, ownerToken);
             if (descriptor.getVendorId() != expectedVendorId
                     || descriptor.getProductId() != expectedProductId) {
                 throw failure(UsbTransportStatus.UNSUPPORTED_DEVICE,
                         "Authorized connection does not match the requested USB device");
             }
-            return new GenericUsbDevice(session, operations, descriptor);
+            return new GenericUsbDevice(session, operations, ownerToken, descriptor);
         } catch (UsbTransportException | RuntimeException error) {
             operations.close(session);
             throw error;
@@ -85,7 +88,7 @@ public final class GenericUsbDevice implements AutoCloseable {
                 UsbTransportStatus.INVALID_ARGUMENT, "Configuration value cannot be zero");
         long handle = requireOpenHandle();
         checkStatus(operations.selectConfiguration(handle, configurationValue), operations);
-        GenericUsbDeviceDescriptor refreshed = readDescriptor(handle, operations);
+        GenericUsbDeviceDescriptor refreshed = readDescriptor(handle, operations, ownerToken);
         synchronized (stateLock) {
             if (session != handle) throw failure(
                     UsbTransportStatus.INVALID_STATE, "Session closed during configuration change");
@@ -96,6 +99,25 @@ public final class GenericUsbDevice implements AutoCloseable {
     public void cancelActiveTransfer() throws UsbTransportException {
         requireWorkerThread(isMainThread());
         checkStatus(operations.cancel(requireOpenHandle()), operations);
+    }
+
+    public GenericUsbInterface claimInterface(int interfaceNumber) throws UsbTransportException {
+        requireWorkerThread(isMainThread());
+        requireUnsigned(interfaceNumber, 0xff, "interfaceNumber");
+        long handle = requireOpenHandle();
+        checkStatus(operations.claimInterface(handle, interfaceNumber), operations);
+        try {
+            refreshDescriptor(handle);
+            GenericUsbInterfaceDescriptor interfaceDescriptor = findInterface(interfaceNumber);
+            if (interfaceDescriptor == null || !interfaceDescriptor.isClaimed()) {
+                throw failure(UsbTransportStatus.INTERNAL_ERROR,
+                        "Claimed interface is absent from the native snapshot");
+            }
+            return new GenericUsbInterface(this, interfaceDescriptor);
+        } catch (UsbTransportException | RuntimeException error) {
+            operations.releaseInterface(handle, interfaceNumber);
+            throw error;
+        }
     }
 
     public boolean isOpen() {
@@ -123,8 +145,20 @@ public final class GenericUsbDevice implements AutoCloseable {
 
     TransportOperations operations() { return operations; }
 
+    Object ownerToken() { return ownerToken; }
+
+    GenericUsbInterfaceDescriptor findInterface(int interfaceNumber) {
+        GenericUsbConfiguration active = getActiveConfiguration();
+        if (active == null) return null;
+        for (GenericUsbInterfaceDescriptor value : active.getInterfaces()) {
+            if (value.getInterfaceNumber() == interfaceNumber) return value;
+        }
+        return null;
+    }
+
     void refreshDescriptor(long expectedHandle) throws UsbTransportException {
-        GenericUsbDeviceDescriptor refreshed = readDescriptor(expectedHandle, operations);
+        GenericUsbDeviceDescriptor refreshed = readDescriptor(
+                expectedHandle, operations, ownerToken);
         synchronized (stateLock) {
             if (session != expectedHandle) throw failure(
                     UsbTransportStatus.INVALID_STATE, "Session closed during operation");
@@ -133,7 +167,8 @@ public final class GenericUsbDevice implements AutoCloseable {
     }
 
     private static GenericUsbDeviceDescriptor readDescriptor(
-            long session, TransportOperations operations) throws UsbTransportException {
+            long session, TransportOperations operations, Object ownerToken)
+            throws UsbTransportException {
         long[] device = operations.getDeviceDescriptor(session);
         requireRecord(device, TransportNativeBridge.DEVICE_RECORD_LENGTH, operations);
         checkStatus((int) device[0], operations);
@@ -143,7 +178,7 @@ public final class GenericUsbDevice implements AutoCloseable {
         for (int configurationIndex = 0; configurationIndex < configurationCount;
                 ++configurationIndex) {
             configurations.add(readConfiguration(
-                    session, operations, generation, configurationIndex));
+                    session, operations, generation, configurationIndex, ownerToken));
         }
         try {
             return new GenericUsbDeviceDescriptor((int) device[2], (int) device[3],
@@ -155,7 +190,8 @@ public final class GenericUsbDevice implements AutoCloseable {
     }
 
     private static GenericUsbConfiguration readConfiguration(long session,
-            TransportOperations operations, long generation, int configurationIndex)
+            TransportOperations operations, long generation, int configurationIndex,
+            Object ownerToken)
             throws UsbTransportException {
         long[] value = operations.getConfiguration(session, configurationIndex);
         requireRecord(value, TransportNativeBridge.CONFIGURATION_RECORD_LENGTH, operations);
@@ -165,7 +201,7 @@ public final class GenericUsbDevice implements AutoCloseable {
         List<GenericUsbInterfaceDescriptor> interfaces = new ArrayList<>(interfaceCount);
         for (int interfaceIndex = 0; interfaceIndex < interfaceCount; ++interfaceIndex) {
             interfaces.add(readInterface(session, operations, generation,
-                    configurationIndex, interfaceIndex));
+                    configurationIndex, interfaceIndex, ownerToken));
         }
         List<AdditionalUsbDescriptor> additional = readAdditional(session, operations, 1,
                 generation, configurationIndex, 0, 0, 0, count(value[8], "descriptor count"));
@@ -175,7 +211,7 @@ public final class GenericUsbDevice implements AutoCloseable {
 
     private static GenericUsbInterfaceDescriptor readInterface(long session,
             TransportOperations operations, long generation, int configurationIndex,
-            int interfaceIndex) throws UsbTransportException {
+            int interfaceIndex, Object ownerToken) throws UsbTransportException {
         long[] value = operations.getInterface(session, configurationIndex, interfaceIndex);
         requireRecord(value, TransportNativeBridge.INTERFACE_RECORD_LENGTH, operations);
         checkStatus((int) value[0], operations);
@@ -184,7 +220,7 @@ public final class GenericUsbDevice implements AutoCloseable {
         List<GenericUsbAlternateSetting> alternates = new ArrayList<>(alternateCount);
         for (int alternateIndex = 0; alternateIndex < alternateCount; ++alternateIndex) {
             alternates.add(readAlternate(session, operations, generation,
-                    configurationIndex, interfaceIndex, alternateIndex));
+                    configurationIndex, interfaceIndex, alternateIndex, ownerToken));
         }
         return new GenericUsbInterfaceDescriptor((int) value[3], (int) value[4], value[5] != 0,
                 alternates, generation);
@@ -192,7 +228,8 @@ public final class GenericUsbDevice implements AutoCloseable {
 
     private static GenericUsbAlternateSetting readAlternate(long session,
             TransportOperations operations, long generation, int configurationIndex,
-            int interfaceIndex, int alternateIndex) throws UsbTransportException {
+            int interfaceIndex, int alternateIndex, Object ownerToken)
+            throws UsbTransportException {
         long[] value = operations.getAlternateSetting(
                 session, configurationIndex, interfaceIndex, alternateIndex);
         requireRecord(value, TransportNativeBridge.ALTERNATE_RECORD_LENGTH, operations);
@@ -202,7 +239,7 @@ public final class GenericUsbDevice implements AutoCloseable {
         List<GenericUsbEndpoint> endpoints = new ArrayList<>(endpointCount);
         for (int endpointIndex = 0; endpointIndex < endpointCount; ++endpointIndex) {
             endpoints.add(readEndpoint(session, operations, generation,
-                    configurationIndex, interfaceIndex, alternateIndex, endpointIndex));
+                    configurationIndex, interfaceIndex, alternateIndex, endpointIndex, ownerToken));
         }
         List<AdditionalUsbDescriptor> additional = readAdditional(session, operations, 2,
                 generation, configurationIndex, interfaceIndex, alternateIndex, 0,
@@ -213,7 +250,7 @@ public final class GenericUsbDevice implements AutoCloseable {
 
     private static GenericUsbEndpoint readEndpoint(long session, TransportOperations operations,
             long generation, int configurationIndex, int interfaceIndex, int alternateIndex,
-            int endpointIndex) throws UsbTransportException {
+            int endpointIndex, Object ownerToken) throws UsbTransportException {
         long[] value = operations.getEndpoint(
                 session, configurationIndex, interfaceIndex, alternateIndex, endpointIndex);
         requireRecord(value, TransportNativeBridge.ENDPOINT_RECORD_LENGTH, operations);
@@ -233,7 +270,7 @@ public final class GenericUsbDevice implements AutoCloseable {
                     "Invalid native endpoint transfer type");
         }
         return new GenericUsbEndpoint((int) value[3], (int) value[4], direction, type,
-                (int) value[7], (int) value[8], additional, generation);
+                (int) value[7], (int) value[8], additional, generation, ownerToken);
     }
 
     private static List<AdditionalUsbDescriptor> readAdditional(long session,
