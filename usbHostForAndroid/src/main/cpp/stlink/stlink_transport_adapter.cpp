@@ -34,6 +34,21 @@ extern "C" usbhost_stlink_transport_adapter *usbhost_stlink_transport_adapter_cr
     return adapter;
 }
 
+extern "C" usbhost_stlink_transport_adapter *usbhost_stlink_transport_adapter_open(
+        const usbhost_stlink_transport_hooks *hooks, const usbhost_stlink_layout *layout,
+        usbhost_status *out_status) {
+    if (!out_status) return nullptr;
+    *out_status = USBHOST_INVALID_ARGUMENT;
+    auto *adapter = usbhost_stlink_transport_adapter_create(hooks, layout);
+    if (!adapter) return nullptr;
+    *out_status = usbhost_stlink_transport_adapter_claim(adapter);
+    if (*out_status != USBHOST_OK) {
+        usbhost_stlink_transport_adapter_destroy(adapter);
+        return nullptr;
+    }
+    return adapter;
+}
+
 extern "C" usbhost_status usbhost_stlink_transport_adapter_claim(
         usbhost_stlink_transport_adapter *adapter) {
     if (!adapter || adapter->closed) return USBHOST_INVALID_STATE;
