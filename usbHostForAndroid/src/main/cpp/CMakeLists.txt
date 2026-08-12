@@ -24,6 +24,7 @@ add_library(usbhost_core STATIC
     transport/session.cpp
     transport/transfer_validation.cpp
     transport/c_api.cpp
+    stlink/stlink_transport_adapter.cpp
     stlink/stlink_usb_layout.c)
 target_include_directories(usbhost_core PUBLIC
     "${CMAKE_CURRENT_LIST_DIR}"
@@ -115,6 +116,7 @@ if(USBHOST_BUILD_TESTS)
         tests/scripted_usb_backend_test.cpp
         tests/status_contract_test.cpp
         tests/stlink_usb_contract_test.cpp
+        tests/stlink_transport_adapter_test.cpp
         tests/transport_header_contract_test.c
         tests/transport_header_cxx_contract_test.cpp
         tests/transport_additional_descriptor_test.cpp
