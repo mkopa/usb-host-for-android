@@ -165,6 +165,9 @@ TransportError TransportSession::selectConfiguration(std::uint8_t configurationV
     if (state_ != SessionState::Open || !backend_) {
         return {USBHOST_INVALID_STATE, 0, "session is not open"};
     }
+    if (activeTransfer_) {
+        return makeTransportError(BackendStatus::Busy, "a transfer is active");
+    }
     if (!claims_.empty()) {
         return makeTransportError(BackendStatus::Busy,
                                   "interfaces must be released before configuration selection");
@@ -209,6 +212,9 @@ TransportError TransportSession::claimInterface(std::uint8_t interfaceNumber,
     if (state_ != SessionState::Open || !backend_) {
         return {USBHOST_INVALID_STATE, 0, "session is not open"};
     }
+    if (activeTransfer_) {
+        return makeTransportError(BackendStatus::Busy, "a transfer is active");
+    }
     const auto activeConfiguration = std::find_if(
         descriptor_.configurations.begin(), descriptor_.configurations.end(),
         [](const ConfigurationDescriptor &configuration) { return configuration.active; });
@@ -247,6 +253,9 @@ TransportError TransportSession::selectAlternateSetting(InterfaceClaimToken &tok
     std::lock_guard<std::mutex> lock(mutex_);
     if (state_ != SessionState::Open || !backend_) {
         return {USBHOST_INVALID_STATE, 0, "session is not open"};
+    }
+    if (activeTransfer_) {
+        return makeTransportError(BackendStatus::Busy, "a transfer is active");
     }
     const auto claim = claims_.find(token.interfaceNumber);
     if (claim == claims_.end() || claim->second.claimGeneration != token.claimGeneration ||
@@ -328,6 +337,9 @@ TransportError TransportSession::releaseInterface(const InterfaceClaimToken &tok
     std::lock_guard<std::mutex> lock(mutex_);
     if (state_ != SessionState::Open || !backend_) {
         return {USBHOST_INVALID_STATE, 0, "session is not open"};
+    }
+    if (activeTransfer_) {
+        return makeTransportError(BackendStatus::Busy, "a transfer is active");
     }
     const auto claim = claims_.find(token.interfaceNumber);
     if (claim == claims_.end() || claim->second.claimGeneration != token.claimGeneration ||
