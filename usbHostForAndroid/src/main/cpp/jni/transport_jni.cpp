@@ -3,6 +3,7 @@
 #include <array>
 #include <cstdint>
 #include <limits>
+#include <utility>
 #include <vector>
 
 #include "jni/transport_jni_contract.hpp"
@@ -21,8 +22,59 @@ jlongArray statusOnly(JNIEnv *env, usbhost_status status) {
     return longs(env, &value, 1);
 }
 
+jlongArray transferResult(JNIEnv *env, usbhost::jni::NativeTransferResult result) {
+    const std::array<jlong, usbhost::jni::kTransferRecordLength> values{
+        result.status, static_cast<jlong>(result.actualLength)};
+    return longs(env, values.data(), values.size());
+}
+
 bool unsignedByte(jint value) { return value >= 0 && value <= 0xff; }
 bool unsignedIndex(jint value) { return value >= 0; }
+
+template <typename Transfer>
+jlongArray marshalTransfer(JNIEnv *env, jbyteArray buffer, jint offset, jint length,
+                           jint timeoutMilliseconds, bool input,
+                           std::uint32_t maximumLength, Transfer &&transfer) {
+    if (buffer == nullptr || timeoutMilliseconds < 1 || timeoutMilliseconds > 60000 ||
+        length < 0 || static_cast<std::uint64_t>(length) > maximumLength) {
+        return transferResult(env, {USBHOST_INVALID_ARGUMENT, 0});
+    }
+    const jsize capacity = env->GetArrayLength(buffer);
+    if (env->ExceptionCheck()) return nullptr;
+    usbhost::jni::TransferSlice slice{};
+    if (!usbhost::jni::checkedTransferSlice(capacity, offset, length, slice))
+        return transferResult(env, {USBHOST_INVALID_ARGUMENT, 0});
+
+    bool javaException = false;
+    const auto outcome = usbhost::jni::executeTransferNoexcept([&] {
+        std::vector<std::uint8_t> nativeBuffer(slice.length);
+        if (!input && slice.length != 0) {
+            env->GetByteArrayRegion(buffer, slice.offset, slice.length,
+                reinterpret_cast<jbyte *>(nativeBuffer.data()));
+            if (env->ExceptionCheck()) {
+                javaException = true;
+                return usbhost::jni::NativeTransferResult{USBHOST_INTERNAL_ERROR, 0};
+            }
+        }
+        std::uint32_t actualLength = 0;
+        const auto status = transfer(nativeBuffer.data(), slice.length,
+                                     static_cast<std::uint32_t>(timeoutMilliseconds),
+                                     &actualLength);
+        usbhost::jni::CompletedInputCopy copy{};
+        if (!usbhost::jni::completedInputCopy(slice, actualLength, copy))
+            return usbhost::jni::NativeTransferResult{USBHOST_INTERNAL_ERROR, 0};
+        if (input && copy.length != 0) {
+            env->SetByteArrayRegion(buffer, copy.destinationOffset, copy.length,
+                reinterpret_cast<const jbyte *>(nativeBuffer.data()));
+            if (env->ExceptionCheck()) {
+                javaException = true;
+                return usbhost::jni::NativeTransferResult{USBHOST_INTERNAL_ERROR, 0};
+            }
+        }
+        return usbhost::jni::NativeTransferResult{status, actualLength};
+    });
+    return javaException ? nullptr : transferResult(env, outcome);
+}
 
 }  // namespace
 
@@ -192,6 +244,56 @@ Java_info_marcin_usbhost_transport_TransportNativeBridge_cancel(
 extern "C" JNIEXPORT jint JNICALL
 Java_info_marcin_usbhost_transport_TransportNativeBridge_close(
         JNIEnv *, jclass, jlong session) { return usbhost_transport_close(session); }
+
+extern "C" JNIEXPORT jlongArray JNICALL
+Java_info_marcin_usbhost_transport_TransportNativeBridge_controlTransfer(
+        JNIEnv *env, jclass, jlong session, jint requestType, jint request,
+        jint value, jint index, jbyteArray buffer, jint offset, jint length,
+        jint timeoutMilliseconds) {
+    if (!unsignedByte(requestType) || !unsignedByte(request) || value < 0 || value > 0xffff ||
+        index < 0 || index > 0xffff) {
+        return transferResult(env, {USBHOST_INVALID_ARGUMENT, 0});
+    }
+    const bool input = (requestType & 0x80) != 0;
+    return marshalTransfer(env, buffer, offset, length, timeoutMilliseconds, input, 0xffff,
+        [=](std::uint8_t *bytes, std::uint32_t size, std::uint32_t timeout,
+            std::uint32_t *actual) {
+            return usbhost_transport_control_transfer(
+                session, requestType, request, value, index, bytes, size, timeout, actual);
+        });
+}
+
+template <typename Transfer>
+jlongArray endpointTransfer(JNIEnv *env, jlong session, jint endpointAddress,
+        jbyteArray buffer, jint offset, jint length, jint timeoutMilliseconds,
+        Transfer &&transfer) {
+    if (!unsignedByte(endpointAddress))
+        return transferResult(env, {USBHOST_INVALID_ARGUMENT, 0});
+    const bool input = (endpointAddress & 0x80) != 0;
+    return marshalTransfer(env, buffer, offset, length, timeoutMilliseconds, input,
+        USBHOST_MAX_READ_SIZE,
+        [=](std::uint8_t *bytes, std::uint32_t size, std::uint32_t timeout,
+            std::uint32_t *actual) {
+            return transfer(session, static_cast<std::uint8_t>(endpointAddress),
+                            bytes, size, timeout, actual);
+        });
+}
+
+extern "C" JNIEXPORT jlongArray JNICALL
+Java_info_marcin_usbhost_transport_TransportNativeBridge_bulkTransfer(
+        JNIEnv *env, jclass, jlong session, jint endpointAddress,
+        jbyteArray buffer, jint offset, jint length, jint timeoutMilliseconds) {
+    return endpointTransfer(env, session, endpointAddress, buffer, offset, length,
+                            timeoutMilliseconds, usbhost_transport_bulk_transfer);
+}
+
+extern "C" JNIEXPORT jlongArray JNICALL
+Java_info_marcin_usbhost_transport_TransportNativeBridge_interruptTransfer(
+        JNIEnv *env, jclass, jlong session, jint endpointAddress,
+        jbyteArray buffer, jint offset, jint length, jint timeoutMilliseconds) {
+    return endpointTransfer(env, session, endpointAddress, buffer, offset, length,
+                            timeoutMilliseconds, usbhost_transport_interrupt_transfer);
+}
 
 extern "C" JNIEXPORT jstring JNICALL
 Java_info_marcin_usbhost_transport_TransportNativeBridge_lastError(JNIEnv *env, jclass) {
