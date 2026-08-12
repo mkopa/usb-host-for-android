@@ -90,6 +90,14 @@ public class GenericUsbDeviceTest {
             controlLength = length;
             return controlResult.clone();
         }
+        @Override public long[] bulkTransfer(long session, int endpoint, byte[] buffer,
+                int offset, int length, int timeoutMillis) {
+            throw new AssertionError("Unexpected bulk transfer");
+        }
+        @Override public long[] interruptTransfer(long session, int endpoint, byte[] buffer,
+                int offset, int length, int timeoutMillis) {
+            throw new AssertionError("Unexpected interrupt transfer");
+        }
 
         @Override public long[] openSession(int fd) {
             openedFileDescriptor = fd;

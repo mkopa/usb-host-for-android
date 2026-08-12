@@ -18,6 +18,10 @@ interface TransportOperations {
     int releaseInterface(long session, int value);
     long[] controlTransfer(long session, UsbControlRequest request,
             byte[] buffer, int offset, int length, int timeoutMillis);
+    long[] bulkTransfer(long session, int endpointAddress,
+            byte[] buffer, int offset, int length, int timeoutMillis);
+    long[] interruptTransfer(long session, int endpointAddress,
+            byte[] buffer, int offset, int length, int timeoutMillis);
     int cancel(long session);
     int close(long session);
     String lastError();
@@ -66,6 +70,16 @@ interface TransportOperations {
             return TransportNativeBridge.controlTransfer(session, request.getRequestType(),
                     request.getRequest(), request.getValue(), request.getIndex(),
                     buffer, offset, length, timeoutMillis);
+        }
+        @Override public long[] bulkTransfer(long session, int endpointAddress,
+                byte[] buffer, int offset, int length, int timeoutMillis) {
+            return TransportNativeBridge.bulkTransfer(
+                    session, endpointAddress, buffer, offset, length, timeoutMillis);
+        }
+        @Override public long[] interruptTransfer(long session, int endpointAddress,
+                byte[] buffer, int offset, int length, int timeoutMillis) {
+            return TransportNativeBridge.interruptTransfer(
+                    session, endpointAddress, buffer, offset, length, timeoutMillis);
         }
         @Override public int cancel(long session) { return TransportNativeBridge.cancel(session); }
         @Override public int close(long session) { return TransportNativeBridge.close(session); }

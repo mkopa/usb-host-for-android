@@ -24,6 +24,51 @@ public final class GenericUsbInterface implements AutoCloseable {
         synchronized (stateLock) { return activeAlternateSetting; }
     }
 
+    public UsbTransferResult bulkTransfer(GenericUsbEndpoint endpoint, byte[] buffer,
+            int offset, int length, int timeoutMillis) throws UsbTransportException {
+        return bulkTransferForTesting(
+                endpoint, buffer, offset, length, timeoutMillis, GenericUsbDevice.isMainThread());
+    }
+
+    UsbTransferResult bulkTransferForTesting(GenericUsbEndpoint endpoint, byte[] buffer,
+            int offset, int length, int timeoutMillis, boolean mainThread)
+            throws UsbTransportException {
+        return endpointTransfer(endpoint, buffer, offset, length, timeoutMillis,
+                mainThread, UsbTransferType.BULK);
+    }
+
+    public UsbTransferResult interruptTransfer(GenericUsbEndpoint endpoint, byte[] buffer,
+            int offset, int length, int timeoutMillis) throws UsbTransportException {
+        return interruptTransferForTesting(
+                endpoint, buffer, offset, length, timeoutMillis, GenericUsbDevice.isMainThread());
+    }
+
+    UsbTransferResult interruptTransferForTesting(GenericUsbEndpoint endpoint, byte[] buffer,
+            int offset, int length, int timeoutMillis, boolean mainThread)
+            throws UsbTransportException {
+        return endpointTransfer(endpoint, buffer, offset, length, timeoutMillis,
+                mainThread, UsbTransferType.INTERRUPT);
+    }
+
+    private UsbTransferResult endpointTransfer(GenericUsbEndpoint endpoint, byte[] buffer,
+            int offset, int length, int timeoutMillis, boolean mainThread,
+            UsbTransferType expectedType) throws UsbTransportException {
+        GenericUsbDevice.requireWorkerThread(mainThread);
+        validateEndpoint(endpoint);
+        if (endpoint.getTransferType() != expectedType) throw GenericUsbDevice.failure(
+                UsbTransportStatus.INVALID_ARGUMENT,
+                "Endpoint transfer type does not match the requested operation");
+        GenericUsbDevice.validateTransferArguments(
+                buffer, offset, length, timeoutMillis, 1_048_576);
+        long handle = parent.requireOpenHandle();
+        long[] result = expectedType == UsbTransferType.BULK
+                ? parent.operations().bulkTransfer(handle, endpoint.getAddress(),
+                        buffer, offset, length, timeoutMillis)
+                : parent.operations().interruptTransfer(handle, endpoint.getAddress(),
+                        buffer, offset, length, timeoutMillis);
+        return GenericUsbDevice.requireTransferResult(result, length, parent.operations());
+    }
+
     public void selectAlternateSetting(int alternateSetting) throws UsbTransportException {
         GenericUsbDevice.requireWorkerThread(GenericUsbDevice.isMainThread());
         if (alternateSetting < 0 || alternateSetting > 0xff) throw GenericUsbDevice.failure(
