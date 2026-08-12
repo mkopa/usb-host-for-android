@@ -53,10 +53,13 @@ public:
     TransportError releaseInterface(const InterfaceClaimToken &token);
     TransportError validateEndpoint(const InterfaceClaimToken &token,
                                     const EndpointDescriptor &endpoint) const;
+    TransferResult controlTransfer(const ControlRequest &request,
+                                   MutableBufferView buffer);
     SessionState state() const;
     DeviceDescriptor descriptorSnapshot() const;
 
 private:
+    struct ActiveTransfer;
     TransportSession(std::unique_ptr<UsbBackend> backend, DeviceDescriptor descriptor);
 
     mutable std::mutex mutex_;
@@ -65,6 +68,7 @@ private:
     DeviceDescriptor descriptor_;
     std::unordered_map<std::uint8_t, InterfaceClaimToken> claims_;
     std::uint64_t nextClaimGeneration_{1};
+    std::shared_ptr<ActiveTransfer> activeTransfer_;
     SessionState state_{SessionState::Opening};
 };
 
