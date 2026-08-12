@@ -8,6 +8,7 @@ USBHOST_1.0 {
         usbhost_status_name;
         usbhost_last_status;
         usbhost_last_error;
+        usbhost_transport_*;
         Java_info_marcin_usbhost_NativeBridge_open;
         Java_info_marcin_usbhost_NativeBridge_connectTarget;
         Java_info_marcin_usbhost_NativeBridge_readMemory;
