@@ -39,8 +39,15 @@ extern "C" usbhost_stlink_transport_adapter *usbhost_stlink_transport_adapter_op
         usbhost_status *out_status) {
     if (!out_status) return nullptr;
     *out_status = USBHOST_INVALID_ARGUMENT;
+    if (!validHooks(hooks) || !layout || layout->request_endpoint == 0
+            || layout->reply_endpoint == 0 || layout->trace_endpoint == 0)
+        return nullptr;
     auto *adapter = usbhost_stlink_transport_adapter_create(hooks, layout);
-    if (!adapter) return nullptr;
+    if (!adapter) {
+        *out_status = USBHOST_INTERNAL_ERROR;
+        hooks->close(hooks->context);
+        return nullptr;
+    }
     *out_status = usbhost_stlink_transport_adapter_claim(adapter);
     if (*out_status != USBHOST_OK) {
         usbhost_stlink_transport_adapter_destroy(adapter);

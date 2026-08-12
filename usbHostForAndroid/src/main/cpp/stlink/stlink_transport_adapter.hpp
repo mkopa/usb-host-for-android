@@ -41,6 +41,14 @@ usbhost_status usbhost_stlink_transport_adapter_bulk(
 void usbhost_stlink_transport_adapter_close(usbhost_stlink_transport_adapter *adapter);
 void usbhost_stlink_transport_adapter_destroy(usbhost_stlink_transport_adapter *adapter);
 
+#if defined(__ANDROID__)
+stlink_t *usbhost_stlink_open_transport(
+    const usbhost_stlink_transport_hooks *hooks,
+    const usbhost_stlink_layout *layout,
+    int32_t swd_frequency_khz,
+    const char *serial);
+#endif
+
 #ifdef __cplusplus
 }
 #endif

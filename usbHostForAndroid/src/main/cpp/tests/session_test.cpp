@@ -181,6 +181,7 @@ void terminalFailureTest() {
 
 int runStlinkUsbContractTest();
 int runStlinkTransportAdapterTest();
+int runStlinkBackendTransportTest();
 int runScriptedUsbBackendTest();
 int runLibusbRuntimeContractTest();
 int runAndroidUsbBackendContractTest();
@@ -218,6 +219,7 @@ int main() {
     terminalFailureTest();
     CHECK(runStlinkUsbContractTest() == 0);
     CHECK(runStlinkTransportAdapterTest() == 0);
+    CHECK(runStlinkBackendTransportTest() == 0);
     CHECK(runScriptedUsbBackendTest() == 0);
     CHECK(runLibusbRuntimeContractTest() == 0);
     CHECK(runAndroidUsbBackendContractTest() == 0);
