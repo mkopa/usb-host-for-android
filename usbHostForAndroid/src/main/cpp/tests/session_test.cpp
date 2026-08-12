@@ -188,6 +188,7 @@ int runTransportErrorTest();
 int runTransportDescriptorTest();
 int runTransportEndpointTransferTest();
 int runTransportConfigurationTest();
+int runTransportCancellationTest();
 int runTransportControlTransferTest();
 int runTransportInterfaceTest();
 int runTransportJniContractTest();
@@ -216,6 +217,7 @@ int main() {
     CHECK(runTransportDescriptorTest() == 0);
     CHECK(runTransportEndpointTransferTest() == 0);
     CHECK(runTransportConfigurationTest() == 0);
+    CHECK(runTransportCancellationTest() == 0);
     CHECK(runTransportControlTransferTest() == 0);
     CHECK(runTransportInterfaceTest() == 0);
     CHECK(runTransportJniContractTest() == 0);

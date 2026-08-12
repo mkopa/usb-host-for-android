@@ -1,6 +1,7 @@
 #include "transport/session.hpp"
 
 #include <algorithm>
+#include <chrono>
 #include <exception>
 #include <new>
 #include <utility>
@@ -14,6 +15,7 @@ struct TransportSession::ActiveTransfer {
     std::mutex mutex;
     std::condition_variable completedCondition;
     OperationId operation{kInvalidOperationId};
+    bool operationPublished{false};
     bool completed{false};
     BackendCompletion completion;
 };
@@ -96,7 +98,8 @@ TransportSession::~TransportSession() {
 }
 
 usbhost_status TransportSession::close() {
-    std::unique_ptr<UsbBackend> backend;
+    std::shared_ptr<UsbBackend> backend;
+    std::shared_ptr<ActiveTransfer> active;
     std::vector<std::uint8_t> claimedInterfaces;
     {
         std::unique_lock<std::mutex> lock(mutex_);
@@ -113,17 +116,44 @@ usbhost_status TransportSession::close() {
             claimedInterfaces.push_back(claim.first);
         }
         claims_.clear();
-        backend = std::move(backend_);
+        backend = backend_;
+        active = activeTransfer_;
     }
 
     if (backend) {
+        const auto deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(1500);
+        if (active) {
+            OperationId operation = kInvalidOperationId;
+            {
+                std::unique_lock<std::mutex> lock(active->mutex);
+                active->completedCondition.wait_until(lock, deadline, [&active] {
+                    return active->operationPublished || active->completed;
+                });
+                operation = active->operation;
+            }
+            if (operation != kInvalidOperationId) backend->cancel(operation);
+        }
         for (const std::uint8_t interfaceNumber : claimedInterfaces) {
             backend->releaseInterface(interfaceNumber);
         }
         backend->close();
+        if (active) {
+            std::unique_lock<std::mutex> lock(active->mutex);
+            if (!active->completed) {
+                active->completedCondition.wait_until(
+                    lock, deadline, [&active] { return active->completed; });
+            }
+            if (!active->completed) {
+                active->completion = {BackendStatus::Cancelled, 0, "close deadline reached"};
+                active->completed = true;
+                active->completedCondition.notify_all();
+            }
+        }
     }
     {
         std::lock_guard<std::mutex> lock(mutex_);
+        backend_.reset();
+        activeTransfer_.reset();
         state_ = SessionState::Closed;
     }
     closedCondition_.notify_all();
@@ -364,7 +394,7 @@ TransferResult TransportSession::controlTransfer(
         return {USBHOST_INVALID_ARGUMENT, 0, "invalid transfer buffer"};
     }
     std::shared_ptr<ActiveTransfer> active;
-    UsbBackend *backend = nullptr;
+    std::shared_ptr<UsbBackend> backend;
     {
         std::lock_guard<std::mutex> lock(mutex_);
         if (state_ != SessionState::Open || !backend_) {
@@ -384,7 +414,7 @@ TransferResult TransportSession::controlTransfer(
             return {USBHOST_INTERNAL_ERROR, 0, "transfer state allocation failed"};
         }
         activeTransfer_ = active;
-        backend = backend_.get();
+        backend = backend_;
     }
 
     std::uint8_t *sliceData = nullptr;
@@ -403,6 +433,8 @@ TransferResult TransportSession::controlTransfer(
     {
         std::lock_guard<std::mutex> lock(active->mutex);
         active->operation = operation;
+        active->operationPublished = true;
+        active->completedCondition.notify_all();
         if (operation == kInvalidOperationId && !active->completed) {
             active->completion = {BackendStatus::InternalFailure, 0,
                                   "backend rejected transfer without completion"};
@@ -447,7 +479,7 @@ TransferResult TransportSession::endpointTransfer(
         return {validation.status, validation.actualLength, validation.diagnostic};
     }
     std::shared_ptr<ActiveTransfer> active;
-    UsbBackend *backend = nullptr;
+    std::shared_ptr<UsbBackend> backend;
     {
         std::lock_guard<std::mutex> lock(mutex_);
         if (state_ != SessionState::Open || !backend_) {
@@ -457,7 +489,7 @@ TransferResult TransportSession::endpointTransfer(
         try { active = std::make_shared<ActiveTransfer>(); }
         catch (...) { return {USBHOST_INTERNAL_ERROR, 0, "transfer state allocation failed"}; }
         activeTransfer_ = active;
-        backend = backend_.get();
+        backend = backend_;
     }
 
     std::uint8_t *sliceData = request.buffer.length == 0
@@ -474,6 +506,8 @@ TransferResult TransportSession::endpointTransfer(
     {
         std::lock_guard<std::mutex> lock(active->mutex);
         active->operation = operation;
+        active->operationPublished = true;
+        active->completedCondition.notify_all();
         if (operation == kInvalidOperationId && !active->completed) {
             active->completion = {BackendStatus::InternalFailure, 0,
                                   "backend rejected transfer without completion"};
@@ -501,6 +535,39 @@ TransferResult TransportSession::endpointTransfer(
         if (state_ == SessionState::Open) state_ = SessionState::Failed;
     }
     return {result.status, result.actualLength, std::move(result.diagnostic)};
+}
+
+TransportError TransportSession::cancelActiveTransfer() {
+    std::shared_ptr<UsbBackend> backend;
+    std::shared_ptr<ActiveTransfer> active;
+    {
+        std::lock_guard<std::mutex> lock(mutex_);
+        if ((state_ != SessionState::Open && state_ != SessionState::Closing) || !backend_) {
+            return {USBHOST_INVALID_STATE, 0, "session is not open"};
+        }
+        active = activeTransfer_;
+        backend = backend_;
+    }
+    if (!active) return {USBHOST_INVALID_STATE, 0, "no active transfer"};
+    OperationId operation = kInvalidOperationId;
+    {
+        std::unique_lock<std::mutex> lock(active->mutex);
+        active->completedCondition.wait_for(lock, std::chrono::seconds(2), [&active] {
+            return active->operationPublished || active->completed;
+        });
+        if (active->completed) return makeTransportError(BackendStatus::Success, {});
+        operation = active->operation;
+    }
+    if (operation == kInvalidOperationId) {
+        return {USBHOST_INTERNAL_ERROR, 0, "transfer submission did not complete"};
+    }
+    if (!backend->cancel(operation)) {
+        std::lock_guard<std::mutex> lock(active->mutex);
+        if (!active->completed) {
+            return {USBHOST_USB_ERROR, 0, "backend rejected transfer cancellation"};
+        }
+    }
+    return makeTransportError(BackendStatus::Success, {});
 }
 
 SessionState TransportSession::state() const {
