@@ -50,11 +50,15 @@ public class GenericUsbInterfaceTest {
 
     private interface ThrowingCall { void run() throws UsbTransportException; }
 
-    private static final class FakeTransport implements TransportOperations {
+    static final class FakeTransport implements TransportOperations {
         final long session;
         long generation = 1;
         int activeAlternate;
         int releaseCount;
+        int bulkCount;
+        int endpointAddress;
+        long[] bulkResult = {0, 0};
+        long[] interruptResult = {0, 0};
         FakeTransport(long session) { this.session = session; }
         @Override public long[] openSession(int fd) { return new long[] {0, session}; }
         @Override public long[] getDeviceDescriptor(long ignored) {
@@ -74,7 +78,7 @@ public class GenericUsbInterfaceTest {
         @Override public long[] getEndpoint(
                 long ignored, int configuration, int iface, int alternate, int index) {
             return new long[] {0, generation, 0, 0x81 + alternate, 1 + alternate,
-                    1, 2, 64, 0, 0};
+                    1, alternate == 0 ? 2 : 3, 64, 0, 0};
         }
         @Override public byte[] getAdditionalDescriptor(long ignored, int scope, long snapshot,
                 int configuration, int iface, int alternate, int endpoint, int index) {
@@ -94,6 +98,17 @@ public class GenericUsbInterfaceTest {
         @Override public long[] controlTransfer(long session, UsbControlRequest request,
                 byte[] buffer, int offset, int length, int timeoutMillis) {
             throw new AssertionError("Unexpected control transfer");
+        }
+        @Override public long[] bulkTransfer(long session, int endpoint, byte[] buffer,
+                int offset, int length, int timeoutMillis) {
+            ++bulkCount;
+            endpointAddress = endpoint;
+            return bulkResult.clone();
+        }
+        @Override public long[] interruptTransfer(long session, int endpoint, byte[] buffer,
+                int offset, int length, int timeoutMillis) {
+            endpointAddress = endpoint;
+            return interruptResult.clone();
         }
         @Override public int cancel(long ignored) { return 0; }
         @Override public int close(long ignored) { return 0; }

@@ -34,6 +34,10 @@ final class TransportNativeBridge {
     static native int releaseInterface(long session, int interfaceNumber);
     static native long[] controlTransfer(long session, int requestType, int request,
             int value, int index, byte[] buffer, int offset, int length, int timeoutMillis);
+    static native long[] bulkTransfer(long session, int endpointAddress,
+            byte[] buffer, int offset, int length, int timeoutMillis);
+    static native long[] interruptTransfer(long session, int endpointAddress,
+            byte[] buffer, int offset, int length, int timeoutMillis);
     static native int cancel(long session);
     static native int close(long session);
     static native String lastError();
