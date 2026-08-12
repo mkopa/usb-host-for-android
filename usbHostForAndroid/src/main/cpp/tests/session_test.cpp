@@ -180,6 +180,7 @@ void terminalFailureTest() {
 }  // namespace
 
 int runStlinkUsbContractTest();
+int runStlinkTransportAdapterTest();
 int runScriptedUsbBackendTest();
 int runLibusbRuntimeContractTest();
 int runAndroidUsbBackendContractTest();
@@ -216,6 +217,7 @@ int main() {
     invalidRangeTest();
     terminalFailureTest();
     CHECK(runStlinkUsbContractTest() == 0);
+    CHECK(runStlinkTransportAdapterTest() == 0);
     CHECK(runScriptedUsbBackendTest() == 0);
     CHECK(runLibusbRuntimeContractTest() == 0);
     CHECK(runAndroidUsbBackendContractTest() == 0);
