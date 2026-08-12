@@ -2,20 +2,20 @@
 
 #include <libusb.h>
 #include <stlink.h>
-#include <unistd.h>
 
 extern "C" {
 #include <read_write.h>
 }
 
 #include <algorithm>
-#include <cerrno>
 #include <cstdint>
 #include <cstring>
 #include <memory>
 #include <string>
 #include <vector>
 
+#include "stlink/stlink_shared_transport.hpp"
+#include "stlink/stlink_transport_adapter.hpp"
 #include "stlink/stlink_usb_android.h"
 #include "core/read_plan.hpp"
 
@@ -44,7 +44,7 @@ Result mapTransportFailure(const char *operation, usbhost_status fallback) {
 
 class StlinkBackend final : public Backend {
 public:
-    StlinkBackend(stlink_t *stlink, int ownedFd) : stlink_(stlink), ownedFd_(ownedFd) {}
+    explicit StlinkBackend(stlink_t *stlink) : stlink_(stlink) {}
 
     ~StlinkBackend() override { close(); }
 
@@ -115,15 +115,10 @@ public:
             stlink_close(stlink_);
             stlink_ = nullptr;
         }
-        if (ownedFd_ >= 0) {
-            ::close(ownedFd_);
-            ownedFd_ = -1;
-        }
     }
 
 private:
     stlink_t *stlink_{nullptr};
-    int ownedFd_{-1};
 };
 
 }  // namespace
@@ -135,22 +130,24 @@ BackendOpenResult openStlinkBackend(int fd, uint16_t vendorId, uint16_t productI
         return {Result::error(USBHOST_UNSUPPORTED_DEVICE,
                               "USB device is not a supported ST-Link V3 debug interface"), nullptr};
     }
-    const int ownedFd = ::dup(fd);
-    if (ownedFd < 0) {
-        const usbhost_status status = errno == EACCES ? USBHOST_PERMISSION_DENIED
-                                                      : USBHOST_INVALID_ARGUMENT;
-        return {Result::error(status, "could not duplicate Android USB descriptor"), nullptr};
+    const usbhost_stlink_shared_transport_api api =
+        usbhost_stlink_production_transport_api();
+    usbhost_stlink_transport_hooks hooks{};
+    const usbhost_status transportStatus =
+        usbhost_stlink_open_shared_transport(fd, &api, &hooks);
+    if (transportStatus != USBHOST_OK) {
+        return {Result::error(transportStatus,
+                              "could not open the shared authorized USB transport"), nullptr};
     }
 
     usbhost_stlink_reset_transport_error();
-    stlink_t *stlink = usbhost_stlink_open_fd(
-        ownedFd, vendorId, productId, static_cast<int32_t>(swdFrequencyKhz));
+    stlink_t *stlink = usbhost_stlink_open_transport(
+        &hooks, &layout, static_cast<int32_t>(swdFrequencyKhz), nullptr);
     if (!stlink) {
         Result result = mapTransportFailure("programmer open", USBHOST_PROGRAMMER_ERROR);
-        ::close(ownedFd);
         return {std::move(result), nullptr};
     }
-    return {Result::ok(), std::make_unique<StlinkBackend>(stlink, ownedFd)};
+    return {Result::ok(), std::make_unique<StlinkBackend>(stlink)};
 }
 
 }  // namespace usbhost

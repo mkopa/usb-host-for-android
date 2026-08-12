@@ -4,6 +4,7 @@
 #include <pthread.h>
 #include <stdint.h>
 #include <stdlib.h>
+#include <string.h>
 
 #include "stlink/stlink_transport_adapter.hpp"
 #include "stlink/stlink_usb_android.h"
@@ -237,15 +238,21 @@ int usbhost_stlink_last_transport_error(void) {
     return usbhost_transport_error;
 }
 
-stlink_t *usbhost_stlink_open_fd(int fd, uint16_t vendor_id, uint16_t product_id,
-                                 int32_t swd_frequency_khz) {
-    usbhost_stlink_layout layout;
-    if (fd < 0 || !usbhost_stlink_v3_layout(vendor_id, product_id, &layout)) {
+stlink_t *usbhost_stlink_open_transport(
+        const usbhost_stlink_transport_hooks *hooks,
+        const usbhost_stlink_layout *layout,
+        int32_t swd_frequency_khz,
+        const char *serial) {
+    if (hooks == NULL || hooks->claim_interface == NULL || hooks->bulk_transfer == NULL
+            || hooks->release_interface == NULL || hooks->close == NULL || layout == NULL
+            || layout->request_endpoint == 0 || layout->reply_endpoint == 0
+            || layout->trace_endpoint == 0) {
         errno = EINVAL;
         return NULL;
     }
 
     if (pthread_once(&usbhost_read_only_backend_once, usbhost_install_read_only_backend) != 0) {
+        hooks->close(hooks->context);
         errno = EIO;
         return NULL;
     }
@@ -255,6 +262,7 @@ stlink_t *usbhost_stlink_open_fd(int fd, uint16_t vendor_id, uint16_t product_id
     if (sl == NULL || transport == NULL) {
         free(sl);
         free(transport);
+        hooks->close(hooks->context);
         errno = ENOMEM;
         return NULL;
     }
@@ -263,20 +271,18 @@ stlink_t *usbhost_stlink_open_fd(int fd, uint16_t vendor_id, uint16_t product_id
     sl->backend_data = transport;
     sl->core_stat = TARGET_UNKNOWN;
     sl->version.stlink_v = 3;
-    transport->ep_req = layout.request_endpoint;
-    transport->ep_rep = layout.reply_endpoint;
-    transport->ep_trace = layout.trace_endpoint;
+    transport->ep_req = layout->request_endpoint;
+    transport->ep_rep = layout->reply_endpoint;
+    transport->ep_trace = layout->trace_endpoint;
     transport->cmd_len = STLINK_CMD_SIZE;
-
-    usbhost_stlink_transport_hooks hooks;
-    int result = usbhost_create_libusb_hooks(fd, vendor_id, product_id, sl->serial, &hooks);
-    if (result != LIBUSB_SUCCESS) {
-        usbhost_transport_error = result;
-        goto error;
+    if (serial != NULL) {
+        strncpy(sl->serial, serial, sizeof(sl->serial) - 1u);
+        sl->serial[sizeof(sl->serial) - 1u] = '\0';
     }
+
     usbhost_status open_status = USBHOST_INTERNAL_ERROR;
     usbhost_stlink_transport_adapter *adapter =
-        usbhost_stlink_transport_adapter_open(&hooks, &layout, &open_status);
+        usbhost_stlink_transport_adapter_open(hooks, layout, &open_status);
     if (adapter == NULL) {
         usbhost_transport_error = usbhost_status_to_libusb(open_status);
         goto error;
@@ -297,4 +303,23 @@ stlink_t *usbhost_stlink_open_fd(int fd, uint16_t vendor_id, uint16_t product_id
 error:
     stlink_close(sl);
     return NULL;
+}
+
+stlink_t *usbhost_stlink_open_fd(int fd, uint16_t vendor_id, uint16_t product_id,
+                                 int32_t swd_frequency_khz) {
+    usbhost_stlink_layout layout;
+    if (fd < 0 || !usbhost_stlink_v3_layout(vendor_id, product_id, &layout)) {
+        errno = EINVAL;
+        return NULL;
+    }
+    char serial[STLINK_SERIAL_BUFFER_SIZE] = {0};
+    usbhost_stlink_transport_hooks hooks;
+    const int result = usbhost_create_libusb_hooks(
+        fd, vendor_id, product_id, serial, &hooks);
+    if (result != LIBUSB_SUCCESS) {
+        usbhost_transport_error = result;
+        return NULL;
+    }
+    return usbhost_stlink_open_transport(
+        &hooks, &layout, swd_frequency_khz, serial);
 }
