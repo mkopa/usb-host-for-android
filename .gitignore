@@ -27,6 +27,7 @@ obj/
 compile_commands.json
 
 # IDE / OS / local state
+.caramelo-meta.json
 .idea/
 .vscode/
 *.iml

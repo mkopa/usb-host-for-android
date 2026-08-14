@@ -158,6 +158,7 @@ if ($dependencyDifference.Count -ne 0) {
 $expectedSubmodules = @{
     'third_party/libusb' = 'https://github.com/libusb/libusb.git'
     'third_party/stlink' = 'https://github.com/stlink-org/stlink.git'
+    'rtlSdrForAndroid/src/main/cpp/third_party/rtl-sdr' = 'https://gitea.osmocom.org/sdr/rtl-sdr.git'
 }
 $configuredSubmodulePaths = @(& git -C $RepositoryRoot config --file .gitmodules --get-regexp '\.path$')
 if ($LASTEXITCODE -ne 0) { throw 'Unable to inspect Git submodule paths.' }
