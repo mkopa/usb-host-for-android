@@ -256,7 +256,9 @@ try {
             ':usbHostForAndroid:test',
             ':usbHostForAndroid:lint',
             ':usbHostForAndroid:assembleDebug',
-            ':usbHostForAndroid:assembleRelease'
+            ':usbHostForAndroid:assembleRelease',
+            ':rtlSdrForAndroid:lint',
+            ':rtlSdrForAndroid:assembleDebug'
         )
         if (-not $SkipPublication) {
             $gradleTasks += ':usbHostForAndroid:verifyReleasePublication'
@@ -303,6 +305,9 @@ try {
 
     Assert-PublicPolicy
     Write-Host "`nAll requested local verification gates passed. No publication or hardware operation was performed."
+    # The public-content scan ends on `git grep`, which exits 1 when it finds nothing. Without an
+    # explicit success code that expected no-match would leak out as a failed verification run.
+    exit 0
 } finally {
     Pop-Location
 }
