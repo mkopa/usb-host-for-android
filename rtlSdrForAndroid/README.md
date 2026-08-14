@@ -30,3 +30,7 @@ Build the APK locally with:
 Validated on 2026-08-12 with a Samsung Galaxy A54 running Android 16 and a generic
 `0BDA:2838` RTL2832U dongle with an R820T/R820T2 tuner. The 93.9 MHz WBFM stream produced clear,
 continuous audio through Android `AudioTrack`; no EEPROM write was performed.
+
+The dated record, its NOT RUN rows, and its scope deviation from the generic smoke procedure are in
+[`docs/hardware/2026-08-12-samsung-a54-rtlsdr-r820t.md`](../docs/hardware/2026-08-12-samsung-a54-rtlsdr-r820t.md).
+This record covers the example only; it does not establish generic RTL-SDR class support.
