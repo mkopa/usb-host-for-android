@@ -12,6 +12,15 @@
 - Before committing, inspect the staged diff and commit metadata for accidental private branding or
   identities.
 
+# Polityka językowa
+
+- Odpowiedzi na czacie oraz cała komunikacja z maintainerem są zawsze w języku polskim.
+- Dokumentacja (specyfikacje, plany, checklisty, notatki, opisy issue i pull requestów) jest pisana
+  po polsku.
+- Kod źródłowy jest w całości po angielsku: identyfikatory, komentarze, komunikaty logów, teksty
+  wyjątków, nazwy testów oraz dokumentacja API osadzona w kodzie (Javadoc, Doxygen, docstringi).
+- Istniejące pliki w języku angielskim nie są tłumaczone wstecznie bez wyraźnej prośby maintainera.
+
 # Temporary local-verification policy
 
 - GitHub Actions are intentionally disabled for this repository while hosted execution is unavailable.
